@@ -482,8 +482,13 @@ else:
 # ==========================================
 # 7. CARTE DE MADAGASCAR INTERACTIVE
 # ==========================================
+df_map = df.dropna(subset=["Lat", "Lon"]).copy()
+df_map["Lat"] = pd.to_numeric(df_map["Lat"], errors="coerce")
+df_map["Lon"] = pd.to_numeric(df_map["Lon"], errors="coerce")
+df_map = df_map.dropna(subset=["Lat", "Lon"])
 st.markdown("---")
 st.subheader("🗺️ Carte Interactive des Agences à Madagascar")
+
 fig_map = px.scatter_map(
     df,
     lat="Lat",
