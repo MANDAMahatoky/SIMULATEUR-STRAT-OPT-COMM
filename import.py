@@ -490,25 +490,15 @@ st.markdown("---")
 st.subheader("🗺️ Carte Interactive des Agences à Madagascar")
 
 fig_map = px.scatter_map(
-    df,
+    df_map,  # <-- Bien utiliser df_map ici
     lat="Lat",
     lon="Lon",
-    size="Vol_2027_Hls",
-    color="Région",
-    hover_name="Agence",
-    hover_data={
-        "Vol_2027_Hls": ":,.0f",
-        "Statut_CS": True,
-        "Statut_MV": True,
-        "Lat": False,
-        "Lon": False,
-    },
-    zoom=4.8,
-    center={"lat": -18.79, "lon": 46.85},
-    mapbox_style="open-street-map",
+    zoom=6,
+    map_style="carto-positron",
     height=500,
 )
-st.plotly_chart(fig_map, use_container_width=True)
+
+st.plotly_chart(fig_map, use_container_width=True
 
 # ==========================================
 # 8. RECOMMANDATIONS & EXPORT CSV PROPRE
