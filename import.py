@@ -498,7 +498,7 @@ fig_map = px.scatter_map(
     height=500,
 )
 
-st.plotly_chart(fig_map, use_container_width=True
+st.plotly_chart(fig_map, use_container_width=True)
 
 # ==========================================
 # 8. RECOMMANDATIONS & EXPORT CSV PROPRE
