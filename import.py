@@ -1285,6 +1285,3 @@ for index, row in df.iterrows():
 
 df_recap_final = pd.DataFrame(recap_lignes)
 st.table(df_recap_final)
-
-df_recap_final = pd.DataFrame(recap_lignes)
-st.table(df_recap_final)
