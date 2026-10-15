@@ -1104,7 +1104,7 @@ else:
 # ==========================================
 st.markdown("---")
 st.subheader("🗺️ Carte Interactive des Agences à Madagascar")
-fig = px.scatter_mapbox(
+fig = px.scatter_map(
     df,
     lat="Lat",
     lon="Lon",
