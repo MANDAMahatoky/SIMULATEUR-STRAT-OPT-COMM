@@ -674,7 +674,7 @@ for index, row in df.iterrows():
       "Action Proposée": action,
   })
   
-    """
+"""
 import io
 import numpy as np
 import pandas as pd
