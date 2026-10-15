@@ -1130,8 +1130,8 @@ st.plotly_chart(fig, use_container_width=True)
 # ==========================================
 st.markdown("---")
 st.subheader("📋 Recommandations Détaillées par Agence & Export")
-
-recolise = []
+recos_list = []
+"""recolise = []"""
 for index, row in df.iterrows():
   region_actuelle = row["Région"]
   agences_meme_region = df[
