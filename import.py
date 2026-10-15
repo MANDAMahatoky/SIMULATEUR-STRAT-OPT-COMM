@@ -1178,6 +1178,7 @@ for index, row in df.iterrows():
       "Statut MV": row["Statut_MV"],
       "Reco Regionale": conseil_transfert,
   })
+    
 
 df_recos = pd.DataFrame(recos_list)
 
