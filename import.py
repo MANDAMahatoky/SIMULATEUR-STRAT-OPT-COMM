@@ -606,7 +606,7 @@ else:
 # ==========================================
 st.markdown("---")
 st.subheader("🗺️ Carte Interactive des Agences à Madagascar")
-fig_map = px.scatter_mapbox(
+fig_map = px.scatter_map(
     df,
     lat="Lat",
     lon="Lon",
@@ -622,7 +622,7 @@ fig_map = px.scatter_mapbox(
     },
     zoom=4.8,
     center={"lat": -18.79, "lon": 46.85},
-    mapbox_style="open-street-map",
+    map_style="open-street-map",
     height=500,
 )
 st.plotly_chart(fig_map, use_container_width=True)
