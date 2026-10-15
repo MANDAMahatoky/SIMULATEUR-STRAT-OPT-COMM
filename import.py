@@ -1120,7 +1120,7 @@ fig = px.scatter_map(
     },
     zoom=4.8,
     center={"lat": -18.79, "lon": 46.85},
-    mapbox_style="open-street-map",
+    map_style="open-street-map",
     height=500,
 )
 st.plotly_chart(fig, use_container_width=True)
