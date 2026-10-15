@@ -1019,7 +1019,7 @@ def highlight_dynamic_cols(col):
 
 st.dataframe(
     df_recap.style.apply(highlight_dynamic_cols, axis=0)
-    .applymap(
+    .map(
         color_status_cells, subset=["Statut CS", "Statut MV"]
     )
     .format({
