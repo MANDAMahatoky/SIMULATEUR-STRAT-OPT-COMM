@@ -480,7 +480,7 @@ df_sim_comp = pd.DataFrame({
 })
 
 st.dataframe(
-    df_sim_comp.style.applymap(
+    df_sim_comp.style.map(
         color_status_cells,
         subset=["Situation AVANT", "Situation APRÈS (Simulation)"],
     ),
