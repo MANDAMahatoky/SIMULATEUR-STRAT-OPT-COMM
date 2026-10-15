@@ -353,7 +353,7 @@ def highlight_dynamic_cols(col):
 
 st.dataframe(
     df_recap.style.apply(highlight_dynamic_cols, axis=0)
-    .applymap(color_status_cells, subset=["Statut CS", "Statut MV"])
+    .map(color_status_cells, subset=["Statut CS", "Statut MV"])
     .format({
         "Vol 2026 (Hls)": "{:,.0f}",
         "Vol 2027 (Hls)": "{:,.0f}",
