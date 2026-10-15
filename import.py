@@ -1,3 +1,5 @@
+
+"""
 import io
 import numpy as np
 import pandas as pd
@@ -673,8 +675,8 @@ for index, row in df.iterrows():
       "Statut MV": row["Statut_MV"],
       "Action Proposée": action,
   })
-  
 """
+
 import io
 import numpy as np
 import pandas as pd
@@ -1284,7 +1286,7 @@ for index, row in df.iterrows():
       "Action Proposée": action,
   })
 
-  """
+  
 
 df_recap_final = pd.DataFrame(recap_lignes)
 st.table(df_recap_final)
