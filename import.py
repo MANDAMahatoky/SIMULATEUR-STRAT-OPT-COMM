@@ -416,15 +416,15 @@ with col_upload1:
     
     # Remplacement du bouton par un choix explicite OUI / NON
     use_defaults_choice = st.radio(
-        "Voulez-vous utiliser les données d'exemple par défaut ?",
+        "Voulez-vous utiliser les données par défaut ?",
         options=["NON", "OUI"],
         index=0, # "NON" sélectionné par défaut
         horizontal=True,
-        help="Choisissez 'OUI' pour afficher le tableau de bord avec les données d'exemple."
+        help="Choisissez 'OUI' pour afficher le tableau de bord avec les données par défaut."
     )
     
     # Bouton de téléchargement du modèle
-    with st.expander("📥 Télécharger le modèle Excel (Données de test)"):
+    with st.expander("📥 Télécharger le modèle Excel (Données)"):
         @st.cache_data
         def get_template_excel():
             df_tpl = load_base_data()
@@ -474,7 +474,7 @@ if _uploaded_data:
 # 2. Si pas de fichier, mais choix OUI -> Valeurs par défaut
 elif use_defaults_choice == "OUI":
     df_raw = load_base_data()
-    st.info("ℹ️ **Mode par défaut activé :** Affichage des données d'exemple de l'application.")
+    st.info("ℹ️ **Mode par défaut activé :** Affichage des données par défaut de l'application.")
 
 # 3. Si ni fichier ni OUI -> DONNÉES VIDES (Pas de crash)
 else:
