@@ -351,7 +351,7 @@ def apply_marker_style(fig, size=6, opacity=0.75):
             pass
 
 # ==========================================
-# 1. DONNÉES DE BASE
+# 1. DONNÉES DE BASE (Modèle par défaut)
 # ==========================================
 @st.cache_data
 def load_base_data():
@@ -402,10 +402,68 @@ def load_base_data():
     }
     return pd.DataFrame(data)
 
-df_raw = load_base_data()
+# ==========================================
+# NOUVEAU : UPLOAD DES DONNÉES DYNAMIQUES
+# ==========================================
+
+# Création des onglets de téléchargement côte à côte
+col_upload1, col_upload2 = st.columns(2)
+
+with col_upload1:
+    _uploaded_data = st.file_uploader(
+        "1. Charger le fichier Excel des données Agences (Récapitulatif)",
+        type=["xlsx", "xls"],
+        key="upload_data"
+    )
+
+with col_upload2:
+    _uploaded_gps = st.file_uploader(
+        "2. Charger le fichier Excel des coordonnées GPS (Coord_GPS.xlsx)",
+        type=["xlsx", "xls"],
+        key="upload_gps"
+    )
+
+# Chargement des données : si upload, on l'utilise, sinon on prend le modèle par défaut
+if _uploaded_data:
+    try:
+        df_raw = pd.read_excel(_uploaded_data)
+        # Vérification des colonnes critiques pour éviter que l'app crash
+        required_cols = [
+            "Région", "Agence", "MV", "CS_Actuels", "Ajustement_CS_DRV",
+            "Vol_2026_Hls", "Vol_2027_Hls", "Nbre_PDV_Tradi",
+            "Temps_Dispo_Mois_Min", "Vol_ZB_Inclut_Mois_Hls",
+            "PDV_Estimes_ZB", "Lat", "Lon"
+        ]
+        missing = [c for c in required_cols if c not in df_raw.columns]
+        if missing:
+            st.error(f"❌ Colonnes manquantes dans le fichier Excel : {missing}. Le modèle par défaut est utilisé.")
+            df_raw = load_base_data()
+        else:
+            st.success("✅ Données Agences chargées avec succès !")
+    except Exception as e:
+        st.error(f"❌ Erreur de lecture du fichier de données : {e}. Le modèle par défaut est utilisé.")
+        df_raw = load_base_data()
+else:
+    df_raw = load_base_data()
+
+# Bouton pour télécharger le modèle si besoin
+@st.cache_data
+def get_template_excel():
+    df_tpl = load_base_data()
+    buffer = io.BytesIO()
+    with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+        df_tpl.to_excel(writer, index=False, sheet_name='Donnees_Agences')
+    return buffer.getvalue()
+
+st.download_button(
+    label="📥 Télécharger le modèle Excel des données (Vierge)",
+    data=get_template_excel(),
+    file_name="modele_donnees_agences.xlsx",
+    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+)
 
 # ==========================================
-# 2. PARSING DMS
+# 2. PARSING DMS (GPS)
 # ==========================================
 def _dms_to_dec_single(txt):
     if not isinstance(txt, str):
@@ -454,7 +512,7 @@ def load_gps_data(_uploaded_file=None):
         xls = pd.ExcelFile(source)
         sheet_names = xls.sheet_names
     except Exception as e:
-        st.error(f"❌ Impossible d'ouvrir le classeur : {e}")
+        st.error(f"❌ Impossible d'ouvrir le classeur GPS : {e}")
         return pd.DataFrame()
 
     sheet_to_use = None
@@ -481,7 +539,7 @@ def load_gps_data(_uploaded_file=None):
     try:
         df_gps = pd.read_excel(source, sheet_name=sheet_to_use)
     except Exception as e:
-        st.error(f"❌ Erreur de lecture de la feuille `{sheet_to_use}` : {e}")
+        st.error(f"❌ Erreur de lecture de la feuille GPS `{sheet_to_use}` : {e}")
         return pd.DataFrame()
 
     df_gps.columns = [str(c).strip() for c in df_gps.columns]
@@ -512,12 +570,7 @@ def load_gps_data(_uploaded_file=None):
     )
     return df_gps.reset_index(drop=True)
 
-# --- CHARGEMENT SYSTÉMATIQUE DU FICHIER GPS ---
-_uploaded = st.file_uploader(
-    "Charger le fichier Excel des coordonnées GPS (Coord_GPS.xlsx)",
-    type=["xlsx", "xls"],
-)
-df_clients_gps = load_gps_data(_uploaded) if _uploaded else pd.DataFrame()
+df_clients_gps = load_gps_data(_uploaded_gps) if _uploaded_gps else pd.DataFrame()
 
 # ==========================================
 # AJOUT DU LIEN DE REDIRECTION VERS LA CARTE
@@ -1074,8 +1127,6 @@ st.markdown("---")
 st.markdown('<div id="section-carte"></div>', unsafe_allow_html=True)
 
 st.subheader("🗺️ Carte Interactive : Agences & Points de Vente Détaillés")
-
-# Suppression du radio et affichage sur la même carte
 
 ag_col = None
 if not df_clients_gps.empty:
