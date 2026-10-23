@@ -430,24 +430,6 @@ with col_upload1:
         key="radio_defaults",
         help="Choisissez 'OUI' pour afficher le tableau de bord avec les données par défaut."
     )
-    
-    # Bouton de téléchargement du modèle
-    with st.expander("📥 Télécharger le modèle Excel (Données)"):
-        @st.cache_data
-        def get_template_excel():
-            df_tpl = load_base_data()
-            buffer = io.BytesIO()
-            with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
-                df_tpl.to_excel(writer, index=False, sheet_name='Donnees_Agences')
-            return buffer.getvalue()
-
-        st.download_button(
-            label="Cliquez ici pour télécharger",
-            data=get_template_excel(),
-            file_name="modele_donnees_agences.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            use_container_width=True
-        )
 
 with col_upload2:
     _uploaded_gps = st.file_uploader(
