@@ -266,19 +266,24 @@ if _uploaded_data:
                 rename_dict[col] = 'Nbre_PDV_Tradi'
             elif col_upper == 'MV':
                 rename_dict[col] = 'MV'
+            elif 'RÉGION' in col_upper or 'REGION' in col_upper:
+                rename_dict[col] = 'Région'
         
         df_raw = df_raw.rename(columns=rename_dict)
-        # Supprimer les doublons qui auraient pu être créés par le renommage
         df_raw = df_raw.loc[:, ~df_raw.columns.duplicated(keep='first')]
 
-        # 4. SUPPRESSION DES COLONNES CALCULÉES (si présentes dans le fichier)
+        # 4. REMPLIR LA COLONNE RÉGION (Correction pour les cellules fusionnées Excel)
+        if "Région" in df_raw.columns:
+            df_raw["Région"] = df_raw["Région"].ffill()
+        else:
+            df_raw["Région"] = "Inconnue"
+
+        # 5. SUPPRESSION DES COLONNES CALCULÉES (si présentes dans le fichier)
         cols_to_drop = ["Total_CS_Propose", "Evol_Vol_Abs", "Evol_Vol_Pct", "PDV_Total_Ajuste", 
                         "Vol_2027_Par_CS", "Vol_2027_Par_MV", "PDV_Par_CS", "PDV_Par_MV", "Ratio_CS_MV"]
         df_raw = df_raw.drop(columns=[c for c in cols_to_drop if c in df_raw.columns])
 
-        # 5. AJOUT DES COLONNES MANQUANTES AVEC VALEURS PAR DÉFAUT
-        if "Région" not in df_raw.columns:
-            df_raw["Région"] = "Inconnue"
+        # 6. AJOUT DES COLONNES MANQUANTES AVEC VALEURS PAR DÉFAUT
         if "Ajustement_CS_DRV" not in df_raw.columns:
             df_raw["Ajustement_CS_DRV"] = 0
         if "Temps_Dispo_Mois_Min" not in df_raw.columns:
@@ -288,26 +293,24 @@ if _uploaded_data:
         if "PDV_Estimes_ZB" not in df_raw.columns:
             df_raw["PDV_Estimes_ZB"] = 0
 
-        # 6. FORCER LES COLONNES NUMÉRIQUES
+        # 7. FORCER LES COLONNES NUMÉRIQUES
         numeric_cols = ["MV", "CS_Actuels", "Ajustement_CS_DRV", "Vol_2026_Hls", "Vol_2027_Hls", 
                         "Nbre_PDV_Tradi", "Temps_Dispo_Mois_Min", "Vol_ZB_Inclut_Mois_Hls", "PDV_Estimes_ZB"]
         for col in numeric_cols:
             if col in df_raw.columns:
-                # Sécurité anti DataFrame au lieu de Series
                 if isinstance(df_raw[col], pd.DataFrame):
                     df_raw[col] = df_raw[col].iloc[:, 0]
                 df_raw[col] = pd.to_numeric(df_raw[col], errors='coerce').fillna(0)
 
-        # 7. RÉCUPÉRATION AUTOMATIQUE DES COORDONNÉES GPS (Lat/Lon)
+        # 8. RÉCUPÉRATION AUTOMATIQUE DES COORDONNÉES GPS (Lat/Lon)
         base_df = load_base_data()
         if "Lat" not in df_raw.columns or "Lon" not in df_raw.columns:
-            # Supprimer les colonnes partielles pour éviter les doublons au merge
             df_raw = df_raw.drop(columns=[c for c in ["Lat", "Lon"] if c in df_raw.columns])
             df_raw = df_raw.merge(base_df[["Agence", "Lat", "Lon"]], on="Agence", how="left")
             df_raw["Lat"] = df_raw["Lat"].fillna(-18.79)
             df_raw["Lon"] = df_raw["Lon"].fillna(46.85)
 
-        # 8. VÉRIFICATION FINALE
+        # 9. VÉRIFICATION FINALE
         required_cols = [
             "Région", "Agence", "MV", "CS_Actuels", "Ajustement_CS_DRV",
             "Vol_2026_Hls", "Vol_2027_Hls", "Nbre_PDV_Tradi",
