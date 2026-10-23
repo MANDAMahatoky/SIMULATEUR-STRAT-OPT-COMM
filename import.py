@@ -408,7 +408,6 @@ def load_base_data():
 if "radio_defaults" not in st.session_state:
     st.session_state.radio_defaults = "NON"
 
-# Callback qui s'exécute quand on ajoute/retire un fichier
 def handle_upload_change():
     st.session_state.radio_defaults = "NON"
 
@@ -422,7 +421,6 @@ with col_upload1:
         on_change=handle_upload_change
     )
     
-    # Le choix OUI/NON écoute le session_state
     use_defaults_choice = st.radio(
         "Voulez-vous utiliser les données par défaut ?",
         options=["NON", "OUI"],
@@ -441,7 +439,6 @@ with col_upload2:
 # ==========================================
 # LOGIQUE DE CHARGEMENT DES DONNÉES
 # ==========================================
-# 1. Si un fichier est uploadé, il a la priorité absolue
 if _uploaded_data:
     try:
         df_raw = pd.read_excel(_uploaded_data)
@@ -459,16 +456,14 @@ if _uploaded_data:
             st.success("✅ Données Agences chargées avec succès !")
     except Exception as e:
         st.error(f"❌ Erreur de lecture du fichier : {e}")
-        df_raw = load_base_data().iloc[0:0] # Données vides en cas d'erreur grave
+        df_raw = load_base_data().iloc[0:0]
 
-# 2. Si pas de fichier, mais choix OUI -> Valeurs par défaut
 elif use_defaults_choice == "OUI":
     df_raw = load_base_data()
     st.info("ℹ️ **Mode par défaut activé :** Affichage des données par défaut de l'application.")
 
-# 3. Si ni fichier ni OUI -> DONNÉES VIDES (Pas de crash)
 else:
-    df_raw = load_base_data().iloc[0:0] # On garde les colonnes mais on supprime les lignes
+    df_raw = load_base_data().iloc[0:0]
     st.warning("⚠️ **En attente de données :** Uploadez un fichier Excel ou sélectionnez 'OUI' pour utiliser les valeurs par défaut.")
 
 # ==========================================
@@ -516,7 +511,6 @@ def load_gps_data(_uploaded_file=None):
         return pd.DataFrame()
 
     source = _uploaded_file
-
     try:
         xls = pd.ExcelFile(source)
         sheet_names = xls.sheet_names
@@ -1142,6 +1136,10 @@ st.markdown('<div id="section-carte"></div>', unsafe_allow_html=True)
 
 st.subheader("🗺️ Carte Interactive : Agences & Points de Vente Détaillés")
 
+# 1. On prépare TOUJOURS les données des agences pour la carte
+# Si df est vide (mode NON sans upload), on utilise les données de base par défaut !
+df_map_agences = df.copy() if not df.empty else load_base_data()
+
 ag_col = None
 if not df_clients_gps.empty:
     for c in df_clients_gps.columns:
@@ -1150,10 +1148,10 @@ if not df_clients_gps.empty:
             ag_col = c
             break
 
-if ag_col is not None and not df.empty:
+if ag_col is not None and not df_map_agences.empty:
     selected_agence_map = st.selectbox(
         "Filtrer par Agence :",
-        ["Toutes les agences"] + df["Agence"].tolist(),
+        ["Toutes les agences"] + df_map_agences["Agence"].tolist(),
     )
     df_map_filtered = df_clients_gps.copy()
     if selected_agence_map != "Toutes les agences":
@@ -1232,6 +1230,7 @@ if not df_map_filtered.empty:
 
     apply_marker_style(fig_map, size=6, opacity=0.75)
 else:
+    # Si aucun PDV, on crée une carte vide centrée sur Mada
     fig_map = scatter_map_auto(
         pd.DataFrame({"Lat": [-18.79], "Lon": [46.85]}),
         lat="Lat", lon="Lon",
@@ -1243,21 +1242,24 @@ else:
     )
     fig_map.data = []
 
-if not df.empty:
-    df_agences = df.copy()
+# 2. Ajout des agences (qui viennent de df_map_agences, garanti non vide)
+if not df_map_agences.empty:
     if selected_agence_map != "Toutes les agences":
-        df_agences = df_agences[df_agences["Agence"] == selected_agence_map]
+        df_map_agences = df_map_agences[df_map_agences["Agence"] == selected_agence_map]
 
-    if not df_agences.empty:
+    if not df_map_agences.empty:
+        # Pour éviter un crash si on utilise les données par défaut et qu'elles n'ont pas les colonnes Statut
+        cols_to_hover = {"Vol_2027_Hls": ":,.0f", "Lat": False, "Lon": False}
+        if "Statut_CS" in df_map_agences.columns:
+            cols_to_hover["Statut_CS"] = True
+        if "Statut_MV" in df_map_agences.columns:
+            cols_to_hover["Statut_MV"] = True
+
         fig_agences = scatter_map_auto(
-            df_agences,
+            df_map_agences,
             lat="Lat", lon="Lon",
             hover_name="Agence",
-            hover_data={
-                "Vol_2027_Hls": ":,.0f",
-                "Statut_CS": True, "Statut_MV": True,
-                "Lat": False, "Lon": False,
-            },
+            hover_data=cols_to_hover,
             mapbox_style="open-street-map",
         )
         
