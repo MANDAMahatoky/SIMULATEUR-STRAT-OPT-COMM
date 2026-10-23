@@ -403,13 +403,8 @@ def load_base_data():
     return pd.DataFrame(data)
 
 # ==========================================
-# NOUVEAU : GESTION DE L'ÉTAT ET UPLOAD
+# NOUVEAU : UPLOAD ET CHOIX OUI/NON
 # ==========================================
-# Initialisation de l'état pour les valeurs par défaut
-if "use_defaults" not in st.session_state:
-    st.session_state.use_defaults = False
-
-# Création des onglets de téléchargement côte à côte
 col_upload1, col_upload2 = st.columns(2)
 
 with col_upload1:
@@ -419,15 +414,17 @@ with col_upload1:
         key="upload_data"
     )
     
-    # Boutons d'action sous l'uploader
-    btn_col1, btn_col2 = st.columns(2)
+    # Remplacement du bouton par un choix explicite OUI / NON
+    use_defaults_choice = st.radio(
+        "Voulez-vous utiliser les données d'exemple par défaut ?",
+        options=["NON", "OUI"],
+        index=0, # "NON" sélectionné par défaut
+        horizontal=True,
+        help="Choisissez 'OUI' pour afficher le tableau de bord avec les données d'exemple."
+    )
     
-    with btn_col1:
-        if st.button("⚙️ Utiliser les valeurs par défaut", use_container_width=True):
-            st.session_state.use_defaults = True
-            st.rerun()
-
-    with btn_col2:
+    # Bouton de téléchargement du modèle
+    with st.expander("📥 Télécharger le modèle Excel (Données de test)"):
         @st.cache_data
         def get_template_excel():
             df_tpl = load_base_data()
@@ -437,7 +434,7 @@ with col_upload1:
             return buffer.getvalue()
 
         st.download_button(
-            label="📥 Télécharger modèle Excel",
+            label="Cliquez ici pour télécharger",
             data=get_template_excel(),
             file_name="modele_donnees_agences.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -468,23 +465,21 @@ if _uploaded_data:
         if missing:
             st.error(f"❌ Colonnes manquantes dans le fichier Excel : {missing}. Le modèle par défaut est utilisé.")
             df_raw = load_base_data()
-            st.session_state.use_defaults = True
         else:
             st.success("✅ Données Agences chargées avec succès !")
-            st.session_state.use_defaults = False # On désactive le mode par défaut
     except Exception as e:
         st.error(f"❌ Erreur de lecture du fichier : {e}")
         df_raw = load_base_data().iloc[0:0] # Données vides en cas d'erreur grave
 
-# 2. Si pas de fichier, mais bouton cliqué -> Valeurs par défaut
-elif st.session_state.use_defaults:
+# 2. Si pas de fichier, mais choix OUI -> Valeurs par défaut
+elif use_defaults_choice == "OUI":
     df_raw = load_base_data()
     st.info("ℹ️ **Mode par défaut activé :** Affichage des données d'exemple de l'application.")
 
-# 3. Si ni fichier ni bouton -> DONNÉES VIDES (Pas de crash)
+# 3. Si ni fichier ni OUI -> DONNÉES VIDES (Pas de crash)
 else:
     df_raw = load_base_data().iloc[0:0] # On garde les colonnes mais on supprime les lignes
-    st.warning("⚠️ **En attente de données :** Uploadez un fichier Excel ou cliquez sur **'Utiliser les valeurs par défaut'** pour afficher le tableau de bord.")
+    st.warning("⚠️ **En attente de données :** Uploadez un fichier Excel ou sélectionnez 'OUI' pour utiliser les valeurs par défaut.")
 
 # ==========================================
 # 2. PARSING DMS (GPS)
