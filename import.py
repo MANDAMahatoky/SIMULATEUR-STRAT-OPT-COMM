@@ -403,23 +403,31 @@ def load_base_data():
     return pd.DataFrame(data)
 
 # ==========================================
-# NOUVEAU : UPLOAD ET CHOIX OUI/NON
+# NOUVEAU : UPLOAD ET CHOIX OUI/NON AVEC CALLBACK
 # ==========================================
+if "radio_defaults" not in st.session_state:
+    st.session_state.radio_defaults = "NON"
+
+# Callback qui s'exécute quand on ajoute/retire un fichier
+def handle_upload_change():
+    st.session_state.radio_defaults = "NON"
+
 col_upload1, col_upload2 = st.columns(2)
 
 with col_upload1:
     _uploaded_data = st.file_uploader(
         "1. Charger le fichier Excel des données Agences (Récapitulatif)",
         type=["xlsx", "xls"],
-        key="upload_data"
+        key="upload_data",
+        on_change=handle_upload_change
     )
     
-    # Remplacement du bouton par un choix explicite OUI / NON
+    # Le choix OUI/NON écoute le session_state
     use_defaults_choice = st.radio(
         "Voulez-vous utiliser les données par défaut ?",
         options=["NON", "OUI"],
-        index=0, # "NON" sélectionné par défaut
         horizontal=True,
+        key="radio_defaults",
         help="Choisissez 'OUI' pour afficher le tableau de bord avec les données par défaut."
     )
     
