@@ -199,7 +199,7 @@ def load_base_data():
     return pd.DataFrame(data)
 
 # ==========================================
-# NOUVEAU : UPLOAD ET CHOIX OUI/NON AVEC CALLBACK ET TRADUCTION
+# NOUVEAU : UPLOAD ET CHOIX OUI/NON AVEC CALLBACK ET TRADUCTION ROBUSTE
 # ==========================================
 if "radio_defaults" not in st.session_state:
     st.session_state.radio_defaults = "NON"
@@ -239,28 +239,39 @@ if _uploaded_data:
     try:
         df_raw = pd.read_excel(_uploaded_data)
         
-        # 1. NETTOYAGE DES LIGNES DE TOTAL
-        if 'AGENCE' in df_raw.columns:
-            df_raw = df_raw[df_raw['AGENCE'].notna() & (~df_raw['AGENCE'].astype(str).str.upper().str.startswith('TOTAL'))]
-        elif 'Agence' in df_raw.columns:
-            df_raw = df_raw[df_raw['Agence'].notna() & (~df_raw['Agence'].astype(str).str.upper().str.startswith('TOTAL'))]
+        # 1. NETTOYAGE DES NOMS DE COLONNES (enlever les espaces invisibles et retours à la ligne)
+        df_raw.columns = df_raw.columns.astype(str).str.replace('\n', ' ').str.strip()
+        
+        # 2. NETTOYAGE DES LIGNES DE TOTAL
+        agence_col = next((c for c in df_raw.columns if c.lower() == 'agence'), None)
+        if agence_col:
+            df_raw = df_raw[df_raw[agence_col].notna() & (~df_raw[agence_col].astype(str).str.upper().str.startswith('TOTAL'))]
 
-        # 2. TRADUCTION DES COLONNES DU NOUVEAU FORMAT VERS L'ANCIEN FORMAT
-        mapping = {
-            "AGENCE": "Agence",
-            "TOTAL CS": "CS_Actuels",
-            "Volume 2026": "Vol_2026_Hls",
-            "Volume 2027": "Vol_2027_Hls",
-            "Univers Tradi": "Nbre_PDV_Tradi"
-        }
-        df_raw = df_raw.rename(columns=mapping)
+        # 3. TRADUCTION FLEXIBLE DES COLONNES (cherche les mots-clés même s'il y a des majuscules/minuscules)
+        rename_dict = {}
+        for col in df_raw.columns:
+            col_upper = col.upper()
+            if col_upper == 'AGENCE':
+                rename_dict[col] = 'Agence'
+            elif 'TOTAL CS' in col_upper or 'CS_ACTUELS' in col_upper:
+                rename_dict[col] = 'CS_Actuels'
+            elif 'VOLUME 2026' in col_upper or 'VOL_2026_HLS' in col_upper:
+                rename_dict[col] = 'Vol_2026_Hls'
+            elif 'VOLUME 2027' in col_upper or 'VOL_2027_HLS' in col_upper:
+                rename_dict[col] = 'Vol_2027_Hls'
+            elif 'UNIVERS TRADI' in col_upper or 'NBRE_PDV_TRADI' in col_upper:
+                rename_dict[col] = 'Nbre_PDV_Tradi'
+            elif col_upper == 'MV':
+                rename_dict[col] = 'MV'
+        
+        df_raw = df_raw.rename(columns=rename_dict)
 
-        # 3. SUPPRESSION DES COLONNES CALCULÉES PAR L'APPLICATION (si présentes dans le fichier)
+        # 4. SUPPRESSION DES COLONNES CALCULÉES (si présentes dans le fichier)
         cols_to_drop = ["Total_CS_Propose", "Evol_Vol_Abs", "Evol_Vol_Pct", "PDV_Total_Ajuste", 
                         "Vol_2027_Par_CS", "Vol_2027_Par_MV", "PDV_Par_CS", "PDV_Par_MV", "Ratio_CS_MV"]
         df_raw = df_raw.drop(columns=[c for c in cols_to_drop if c in df_raw.columns])
 
-        # 4. AJOUT DES COLONNES MANQUANTES AVEC VALEURS PAR DÉFAUT
+        # 5. AJOUT DES COLONNES MANQUANTES AVEC VALEURS PAR DÉFAUT
         if "Région" not in df_raw.columns:
             df_raw["Région"] = "Inconnue"
         if "Ajustement_CS_DRV" not in df_raw.columns:
@@ -272,24 +283,21 @@ if _uploaded_data:
         if "PDV_Estimes_ZB" not in df_raw.columns:
             df_raw["PDV_Estimes_ZB"] = 0
 
-        # 5. FORCER LES COLONNES NUMÉRIQUES (Pour éviter les erreurs si le fichier contient des formules ou du texte)
+        # 6. FORCER LES COLONNES NUMÉRIQUES
         numeric_cols = ["MV", "CS_Actuels", "Ajustement_CS_DRV", "Vol_2026_Hls", "Vol_2027_Hls", 
                         "Nbre_PDV_Tradi", "Temps_Dispo_Mois_Min", "Vol_ZB_Inclut_Mois_Hls", "PDV_Estimes_ZB"]
         for col in numeric_cols:
             if col in df_raw.columns:
                 df_raw[col] = pd.to_numeric(df_raw[col], errors='coerce').fillna(0)
 
-        # 6. RÉCUPÉRATION AUTOMATIQUE DES COORDONNÉES GPS (LAT/LON)
-        # Si votre fichier n'a pas de Lat/Lon, on les récupère depuis la base par défaut
+        # 7. RÉCUPÉRATION AUTOMATIQUE DES COORDONNÉES GPS (Lat/Lon)
         base_df = load_base_data()
         if "Lat" not in df_raw.columns or "Lon" not in df_raw.columns:
-            # On fusionne avec la base de données par défaut sur la colonne "Agence"
             df_raw = df_raw.merge(base_df[["Agence", "Lat", "Lon"]], on="Agence", how="left")
-            # Si l'agence n'est pas trouvée dans la base, on met un point par défaut (Centre de Mada)
             df_raw["Lat"] = df_raw["Lat"].fillna(-18.79)
             df_raw["Lon"] = df_raw["Lon"].fillna(46.85)
 
-        # 7. VÉRIFICATION FINALE
+        # 8. VÉRIFICATION FINALE
         required_cols = [
             "Région", "Agence", "MV", "CS_Actuels", "Ajustement_CS_DRV",
             "Vol_2026_Hls", "Vol_2027_Hls", "Nbre_PDV_Tradi",
