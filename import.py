@@ -403,8 +403,11 @@ def load_base_data():
     return pd.DataFrame(data)
 
 # ==========================================
-# NOUVEAU : UPLOAD DES DONNÉES DYNAMIQUES
+# NOUVEAU : GESTION DE L'ÉTAT ET UPLOAD
 # ==========================================
+# Initialisation de l'état pour les valeurs par défaut
+if "use_defaults" not in st.session_state:
+    st.session_state.use_defaults = False
 
 # Création des onglets de téléchargement côte à côte
 col_upload1, col_upload2 = st.columns(2)
@@ -415,6 +418,31 @@ with col_upload1:
         type=["xlsx", "xls"],
         key="upload_data"
     )
+    
+    # Boutons d'action sous l'uploader
+    btn_col1, btn_col2 = st.columns(2)
+    
+    with btn_col1:
+        if st.button("⚙️ Utiliser les valeurs par défaut", use_container_width=True):
+            st.session_state.use_defaults = True
+            st.rerun()
+
+    with btn_col2:
+        @st.cache_data
+        def get_template_excel():
+            df_tpl = load_base_data()
+            buffer = io.BytesIO()
+            with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+                df_tpl.to_excel(writer, index=False, sheet_name='Donnees_Agences')
+            return buffer.getvalue()
+
+        st.download_button(
+            label="📥 Télécharger modèle Excel",
+            data=get_template_excel(),
+            file_name="modele_donnees_agences.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True
+        )
 
 with col_upload2:
     _uploaded_gps = st.file_uploader(
@@ -423,11 +451,13 @@ with col_upload2:
         key="upload_gps"
     )
 
-# Chargement des données : si upload, on l'utilise, sinon on prend le modèle par défaut
+# ==========================================
+# LOGIQUE DE CHARGEMENT DES DONNÉES
+# ==========================================
+# 1. Si un fichier est uploadé, il a la priorité absolue
 if _uploaded_data:
     try:
         df_raw = pd.read_excel(_uploaded_data)
-        # Vérification des colonnes critiques pour éviter que l'app crash
         required_cols = [
             "Région", "Agence", "MV", "CS_Actuels", "Ajustement_CS_DRV",
             "Vol_2026_Hls", "Vol_2027_Hls", "Nbre_PDV_Tradi",
@@ -438,29 +468,23 @@ if _uploaded_data:
         if missing:
             st.error(f"❌ Colonnes manquantes dans le fichier Excel : {missing}. Le modèle par défaut est utilisé.")
             df_raw = load_base_data()
+            st.session_state.use_defaults = True
         else:
             st.success("✅ Données Agences chargées avec succès !")
+            st.session_state.use_defaults = False # On désactive le mode par défaut
     except Exception as e:
-        st.error(f"❌ Erreur de lecture du fichier de données : {e}. Le modèle par défaut est utilisé.")
-        df_raw = load_base_data()
-else:
+        st.error(f"❌ Erreur de lecture du fichier : {e}")
+        df_raw = load_base_data().iloc[0:0] # Données vides en cas d'erreur grave
+
+# 2. Si pas de fichier, mais bouton cliqué -> Valeurs par défaut
+elif st.session_state.use_defaults:
     df_raw = load_base_data()
+    st.info("ℹ️ **Mode par défaut activé :** Affichage des données d'exemple de l'application.")
 
-# Bouton pour télécharger le modèle si besoin
-@st.cache_data
-def get_template_excel():
-    df_tpl = load_base_data()
-    buffer = io.BytesIO()
-    with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
-        df_tpl.to_excel(writer, index=False, sheet_name='Donnees_Agences')
-    return buffer.getvalue()
-
-st.download_button(
-    label="📥 Télécharger le modèle Excel des données (Vierge)",
-    data=get_template_excel(),
-    file_name="modele_donnees_agences.xlsx",
-    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-)
+# 3. Si ni fichier ni bouton -> DONNÉES VIDES (Pas de crash)
+else:
+    df_raw = load_base_data().iloc[0:0] # On garde les colonnes mais on supprime les lignes
+    st.warning("⚠️ **En attente de données :** Uploadez un fichier Excel ou cliquez sur **'Utiliser les valeurs par défaut'** pour afficher le tableau de bord.")
 
 # ==========================================
 # 2. PARSING DMS (GPS)
@@ -641,26 +665,31 @@ seuil_surcharge_mv = st.sidebar.number_input(
 )
 
 st.sidebar.subheader("🎯 Simulation Zones Blanches par Agence")
-selected_agence_zb = st.sidebar.selectbox(
-    "Sélectionner une Agence", df_raw["Agence"].unique()
-)
-default_zb_vol = int(
-    df_raw.loc[df_raw["Agence"] == selected_agence_zb, "Vol_ZB_Inclut_Mois_Hls"].values[0]
-)
-default_zb_pdv = int(
-    df_raw.loc[df_raw["Agence"] == selected_agence_zb, "PDV_Estimes_ZB"].values[0]
-)
 
-sim_zb_vol_mois = st.sidebar.number_input(
-    f"Volume ZB Mensuel ({selected_agence_zb})", 0, 10000, default_zb_vol
-)
-sim_zb_pdv = st.sidebar.number_input(
-    f"PDV ZB ({selected_agence_zb})", 0, 2000, default_zb_pdv
-)
-
-df = df_raw.copy()
-df.loc[df["Agence"] == selected_agence_zb, "Vol_ZB_Inclut_Mois_Hls"] = sim_zb_vol_mois
-df.loc[df["Agence"] == selected_agence_zb, "PDV_Estimes_ZB"] = sim_zb_pdv
+if not df_raw.empty:
+    selected_agence_zb = st.sidebar.selectbox(
+        "Sélectionner une Agence", df_raw["Agence"].unique()
+    )
+    default_zb_vol = int(
+        df_raw.loc[df_raw["Agence"] == selected_agence_zb, "Vol_ZB_Inclut_Mois_Hls"].values[0]
+    )
+    default_zb_pdv = int(
+        df_raw.loc[df_raw["Agence"] == selected_agence_zb, "PDV_Estimes_ZB"].values[0]
+    )
+    
+    sim_zb_vol_mois = st.sidebar.number_input(
+        f"Volume ZB Mensuel ({selected_agence_zb})", 0, 10000, default_zb_vol
+    )
+    sim_zb_pdv = st.sidebar.number_input(
+        f"PDV ZB ({selected_agence_zb})", 0, 2000, default_zb_pdv
+    )
+    
+    df = df_raw.copy()
+    df.loc[df["Agence"] == selected_agence_zb, "Vol_ZB_Inclut_Mois_Hls"] = sim_zb_vol_mois
+    df.loc[df["Agence"] == selected_agence_zb, "PDV_Estimes_ZB"] = sim_zb_pdv
+else:
+    st.sidebar.info("Sélectionnez des données pour voir les options.")
+    df = df_raw.copy()
 
 # ==========================================
 # 5. CALCULS DYNAMIQUES
@@ -676,10 +705,16 @@ df["PDV_Par_CS"] = df["PDV_Total_Ajuste"] / df["Total_CS_Propose"]
 df["PDV_Par_MV"] = df["PDV_Total_Ajuste"] / df["MV"]
 df["Ratio_CS_MV"] = df["Total_CS_Propose"] / df["MV"]
 
-nat_vol_cs = df["Vol_2027_Hls"].sum() / df["Total_CS_Propose"].sum()
-nat_vol_mv = df["Vol_2027_Hls"].sum() / df["MV"].sum()
-nat_pdv_cs = df["PDV_Total_Ajuste"].sum() / df["Total_CS_Propose"].sum()
-nat_pdv_mv = df["PDV_Total_Ajuste"].sum() / df["MV"].sum()
+# Sécurisation des calculs de moyennes nationales contre la division par zéro
+sum_vol = df["Vol_2027_Hls"].sum()
+sum_cs = df["Total_CS_Propose"].sum()
+sum_mv = df["MV"].sum()
+sum_pdv = df["PDV_Total_Ajuste"].sum()
+
+nat_vol_cs = sum_vol / sum_cs if sum_cs > 0 else 0
+nat_vol_mv = sum_vol / sum_mv if sum_mv > 0 else 0
+nat_pdv_cs = sum_pdv / sum_cs if sum_cs > 0 else 0
+nat_pdv_mv = sum_pdv / sum_mv if sum_mv > 0 else 0
 
 st.subheader("🇲🇬 Indicateurs Clés de Référence (Moyenne Nationale)")
 
@@ -803,90 +838,88 @@ st.markdown(
     "de la charge (Volume & PDV) ainsi que du **code couleur de situation** :"
 )
 
-# Initialisation du dictionnaire de sauvegarde des simulations
 if "simulations_sauvegardees" not in st.session_state:
     st.session_state.simulations_sauvegardees = {}
 
-sc1, sc2, sc3 = st.columns(3)
-selected_sim_agence = sc1.selectbox(
-    "Sélectionner l'Agence à simuler", df["Agence"].unique(), key="sim_agence_select"
-)
+if not df.empty:
+    sc1, sc2, sc3 = st.columns(3)
+    selected_sim_agence = sc1.selectbox(
+        "Sélectionner l'Agence à simuler", df["Agence"].unique(), key="sim_agence_select"
+    )
 
-# On récupère les valeurs actuelles sauvegardées pour cette agence (ou 0 par défaut)
-default_cs = st.session_state.simulations_sauvegardees.get(selected_sim_agence, {}).get("delta_cs", 0)
-default_mv = st.session_state.simulations_sauvegardees.get(selected_sim_agence, {}).get("delta_mv", 0)
+    default_cs = st.session_state.simulations_sauvegardees.get(selected_sim_agence, {}).get("delta_cs", 0)
+    default_mv = st.session_state.simulations_sauvegardees.get(selected_sim_agence, {}).get("delta_mv", 0)
 
-# Les inputs utilisent une clé dynamique pour se mettre à jour quand on change d'agence
-delta_cs = sc2.number_input(
-    "Ajustement CS (+/- Recrutement/Transfert)", -15, 15, default_cs, step=1, key=f"sim_delta_cs_{selected_sim_agence}"
-)
-delta_mv = sc3.number_input(
-    "Ajustement MV (+/- Recrutement/Transfert)", -5, 5, default_mv, step=1, key=f"sim_delta_mv_{selected_sim_agence}"
-)
+    delta_cs = sc2.number_input(
+        "Ajustement CS (+/- Recrutement/Transfert)", -15, 15, default_cs, step=1, key=f"sim_delta_cs_{selected_sim_agence}"
+    )
+    delta_mv = sc3.number_input(
+        "Ajustement MV (+/- Recrutement/Transfert)", -5, 5, default_mv, step=1, key=f"sim_delta_mv_{selected_sim_agence}"
+    )
 
-row_sim_orig = df.loc[df["Agence"] == selected_sim_agence].iloc[0]
-mv_avant = row_sim_orig["MV"]
-cs_avant = row_sim_orig["Total_CS_Propose"]
-vol_2027_sim = row_sim_orig["Vol_2027_Hls"]
-pdv_tot_sim = row_sim_orig["PDV_Total_Ajuste"]
+    row_sim_orig = df.loc[df["Agence"] == selected_sim_agence].iloc[0]
+    mv_avant = row_sim_orig["MV"]
+    cs_avant = row_sim_orig["Total_CS_Propose"]
+    vol_2027_sim = row_sim_orig["Vol_2027_Hls"]
+    pdv_tot_sim = row_sim_orig["PDV_Total_Ajuste"]
 
-vol_cs_avant = row_sim_orig["Vol_2027_Par_CS"]
-vol_mv_avant = row_sim_orig["Vol_2027_Par_MV"]
-pdv_cs_avant = row_sim_orig["PDV_Par_CS"]
-statut_cs_avant = row_sim_orig["Statut_CS"]
-statut_mv_avant = row_sim_orig["Statut_MV"]
+    vol_cs_avant = row_sim_orig["Vol_2027_Par_CS"]
+    vol_mv_avant = row_sim_orig["Vol_2027_Par_MV"]
+    pdv_cs_avant = row_sim_orig["PDV_Par_CS"]
+    statut_cs_avant = row_sim_orig["Statut_CS"]
+    statut_mv_avant = row_sim_orig["Statut_MV"]
 
-cs_apres = max(1, cs_avant + delta_cs)
-mv_apres = max(1, mv_avant + delta_mv)
-vol_cs_apres = vol_2027_sim / cs_apres
-vol_mv_apres = vol_2027_sim / mv_apres
-pdv_cs_apres = pdv_tot_sim / cs_apres
-statut_cs_apres = get_statut_cs(pdv_cs_apres)
-statut_mv_apres = get_statut_mv(vol_mv_apres)
+    cs_apres = max(1, cs_avant + delta_cs)
+    mv_apres = max(1, mv_avant + delta_mv)
+    vol_cs_apres = vol_2027_sim / cs_apres
+    vol_mv_apres = vol_2027_sim / mv_apres
+    pdv_cs_apres = pdv_tot_sim / cs_apres
+    statut_cs_apres = get_statut_cs(pdv_cs_apres)
+    statut_mv_apres = get_statut_mv(vol_mv_apres)
 
-df_sim_comp = pd.DataFrame({
-    "Dimension": [
-        "Effectif MV", "Effectif CS", "Ratio CS / 1 MV",
-        "Volume / CS (Hls/an)", "Volume / MV (Hls/an)",
-        "Charge PDV / CS", "Statut Charge CS", "Statut Charge MV",
-    ],
-    "Situation AVANT": [
-        f"{mv_avant}", f"{cs_avant}", f"{cs_avant / mv_avant:.1f}",
-        f"{vol_cs_avant:,.0f}", f"{vol_mv_avant:,.0f}",
-        f"{pdv_cs_avant:.1f}", statut_cs_avant, statut_mv_avant,
-    ],
-    "Situation APRÈS (Simulation)": [
-        f"{mv_apres} ({delta_mv:+d})", f"{cs_apres} ({delta_cs:+d})",
-        f"{cs_apres / mv_apres:.1f}", f"{vol_cs_apres:,.0f}",
-        f"{vol_mv_apres:,.0f}", f"{pdv_cs_apres:.1f}",
-        statut_cs_apres, statut_mv_apres,
-    ],
-})
+    df_sim_comp = pd.DataFrame({
+        "Dimension": [
+            "Effectif MV", "Effectif CS", "Ratio CS / 1 MV",
+            "Volume / CS (Hls/an)", "Volume / MV (Hls/an)",
+            "Charge PDV / CS", "Statut Charge CS", "Statut Charge MV",
+        ],
+        "Situation AVANT": [
+            f"{mv_avant}", f"{cs_avant}", f"{cs_avant / mv_avant:.1f}",
+            f"{vol_cs_avant:,.0f}", f"{vol_mv_avant:,.0f}",
+            f"{pdv_cs_avant:.1f}", statut_cs_avant, statut_mv_avant,
+        ],
+        "Situation APRÈS (Simulation)": [
+            f"{mv_apres} ({delta_mv:+d})", f"{cs_apres} ({delta_cs:+d})",
+            f"{cs_apres / mv_apres:.1f}", f"{vol_cs_apres:,.0f}",
+            f"{vol_mv_apres:,.0f}", f"{pdv_cs_apres:.1f}",
+            statut_cs_apres, statut_mv_apres,
+        ],
+    })
 
-st.dataframe(
-    df_sim_comp.style.map(
-        color_status_cells, subset=["Situation AVANT", "Situation APRÈS (Simulation)"]
-    ),
-    use_container_width=True,
-)
+    st.dataframe(
+        df_sim_comp.style.map(
+            color_status_cells, subset=["Situation AVANT", "Situation APRÈS (Simulation)"]
+        ),
+        use_container_width=True,
+    )
 
-# Bouton pour enregistrer les modifications
-col_btn1, col_btn2 = st.columns([1, 4])
-with col_btn1:
-    if st.button("💾 Enregistrer cette simulation", key="save_sim"):
-        st.session_state.simulations_sauvegardees[selected_sim_agence] = {
-            "delta_cs": delta_cs,
-            "delta_mv": delta_mv
-        }
-        st.success(f"Modifications sauvegardées pour {selected_sim_agence} !")
-        st.rerun()
+    col_btn1, col_btn2 = st.columns([1, 4])
+    with col_btn1:
+        if st.button("💾 Enregistrer cette simulation", key="save_sim"):
+            st.session_state.simulations_sauvegardees[selected_sim_agence] = {
+                "delta_cs": delta_cs,
+                "delta_mv": delta_mv
+            }
+            st.success(f"Modifications sauvegardées pour {selected_sim_agence} !")
+            st.rerun()
 
-# Affichage des simulations actives pour info
-if st.session_state.simulations_sauvegardees:
-    st.info("📌 **Simulations actives en mémoire :**")
-    for ag, mods in st.session_state.simulations_sauvegardees.items():
-        if mods['delta_cs'] != 0 or mods['delta_mv'] != 0:
-            st.write(f"- **{ag}** : CS {mods['delta_cs']:+d} | MV {mods['delta_mv']:+d}")
+    if st.session_state.simulations_sauvegardees:
+        st.info("📌 **Simulations actives en mémoire :**")
+        for ag, mods in st.session_state.simulations_sauvegardees.items():
+            if mods['delta_cs'] != 0 or mods['delta_mv'] != 0:
+                st.write(f"- **{ag}** : CS {mods['delta_cs']:+d} | MV {mods['delta_mv']:+d}")
+else:
+    st.info("Aucune donnée disponible pour le module de simulation.")
 
 
 # ==========================================
@@ -897,7 +930,6 @@ st.subheader("📈 Visualisation Interactive : Agence vs Moyenne Nationale")
 
 VIBRANT_COLORS = ["#007bff", "#6f42c1", "#fd7e14", "#17a2b8", "#e83e8c"]
 
-# --- Simulations enregistrées (uniquement celles qui modifient quelque chose) ---
 sims_actives = {
     ag: m for ag, m in st.session_state.simulations_sauvegardees.items()
     if m["delta_cs"] != 0 or m["delta_mv"] != 0
@@ -906,37 +938,35 @@ sims_actives = {
 comparer = st.toggle(
     "🔄 Comparer Avant / Après simulation",
     value=False,
-    disabled=not sims_actives,
+    disabled=not sims_actives or df.empty,
     key="toggle_compare_graphs",
-    help="Affiche sur les graphiques l'impact des simulations enregistrées "
-         "dans le module « Simulation Avant / Après ».",
+    help="Affiche sur les graphiques l'impact des simulations enregistrées.",
 )
 if not sims_actives:
-    st.caption(
-        "ℹ️ Enregistrez au moins une simulation (bouton 💾 plus haut) "
-        "pour activer la comparaison."
-    )
+    st.caption("ℹ️ Enregistrez au moins une simulation pour activer la comparaison.")
 
-# --- Construction du scénario « Après » ---
 df_apres = df.copy()
-df_apres["Total_CS_Propose"] = [
-    max(1, r["Total_CS_Propose"] + sims_actives.get(r["Agence"], {}).get("delta_cs", 0))
-    for _, r in df.iterrows()
-]
-df_apres["MV"] = [
-    max(1, r["MV"] + sims_actives.get(r["Agence"], {}).get("delta_mv", 0))
-    for _, r in df.iterrows()
-]
-df_apres["Vol_2027_Par_CS"] = df_apres["Vol_2027_Hls"] / df_apres["Total_CS_Propose"]
-df_apres["PDV_Par_CS"] = df_apres["PDV_Total_Ajuste"] / df_apres["Total_CS_Propose"]
+if not df_apres.empty:
+    df_apres["Total_CS_Propose"] = [
+        max(1, r["Total_CS_Propose"] + sims_actives.get(r["Agence"], {}).get("delta_cs", 0))
+        for _, r in df.iterrows()
+    ]
+    df_apres["MV"] = [
+        max(1, r["MV"] + sims_actives.get(r["Agence"], {}).get("delta_mv", 0))
+        for _, r in df.iterrows()
+    ]
+    df_apres["Vol_2027_Par_CS"] = df_apres["Vol_2027_Hls"] / df_apres["Total_CS_Propose"]
+    df_apres["PDV_Par_CS"] = df_apres["PDV_Total_Ajuste"] / df_apres["Total_CS_Propose"]
 
-nat_vol_cs_apres = df_apres["Vol_2027_Hls"].sum() / df_apres["Total_CS_Propose"].sum()
-nat_pdv_cs_apres = df_apres["PDV_Total_Ajuste"].sum() / df_apres["Total_CS_Propose"].sum()
+    nat_vol_cs_apres = df_apres["Vol_2027_Hls"].sum() / df_apres["Total_CS_Propose"].sum() if df_apres["Total_CS_Propose"].sum() > 0 else 0
+    nat_pdv_cs_apres = df_apres["PDV_Total_Ajuste"].sum() / df_apres["Total_CS_Propose"].sum() if df_apres["Total_CS_Propose"].sum() > 0 else 0
+else:
+    nat_vol_cs_apres = 0
+    nat_pdv_cs_apres = 0
 
 g_cols = st.columns(2)
 
 if not comparer:
-    # ---------- Vue standard ----------
     with g_cols[0]:
         fig_vol = px.bar(
             df, x="Agence", y="Vol_2027_Par_CS", color="Région",
@@ -973,7 +1003,6 @@ if not comparer:
         st.plotly_chart(fig_pdv, use_container_width=True)
 
 else:
-    # ---------- Vue comparative Avant / Après ----------
     d_avant = df[["Agence", "Région", "Vol_2027_Par_CS", "PDV_Par_CS"]].copy()
     d_avant["Scénario"] = "Avant"
     d_apres = df_apres[["Agence", "Région", "Vol_2027_Par_CS", "PDV_Par_CS"]].copy()
@@ -1034,7 +1063,6 @@ else:
         fig_pdv_c.update_layout(xaxis_tickangle=-45, legend_title_text="")
         st.plotly_chart(fig_pdv_c, use_container_width=True)
 
-    # --- Résumé chiffré des agences modifiées ---
     lignes = []
     for ag, m in sims_actives.items():
         a = df.loc[df["Agence"] == ag].iloc[0]
@@ -1065,65 +1093,66 @@ else:
 st.markdown("---")
 st.subheader("💰 Simulation Financière & Point Mort (Break-even) par Agence")
 
-fin_cols = st.columns(3)
-selected_fin_agence = fin_cols[0].selectbox(
-    "Choisir l'Agence pour la simulation financière", df["Agence"].unique()
-)
-cout_mensuel_cs = fin_cols[1].number_input(
-    "Coût mensuel d'un CS (MGA)", 500000, 5000000, 1500000, 100000
-)
-marge_nette_hl = fin_cols[2].number_input(
-    "Marge nette par Hectolitre (MGA/Hl)", 10000, 500000, 50000, 5000
-)
-
-row_fin = df.loc[df["Agence"] == selected_fin_agence].iloc[0]
-vol_agence = row_fin["Vol_2027_Hls"]
-cs_agence = row_fin["Total_CS_Propose"]
-vol_par_cs_agence = row_fin["Vol_2027_Par_CS"]
-
-cout_annuel_cs = cout_mensuel_cs * 12
-seuil_rentabilite_hl = cout_annuel_cs / marge_nette_hl if marge_nette_hl > 0 else 0
-couverture_besoin = (
-    (vol_par_cs_agence / seuil_rentabilite_hl) * 100 if seuil_rentabilite_hl > 0 else 0
-)
-
-st.info(f"**Mode de calcul & Résultats pour : {selected_fin_agence}**")
-
-st.latex(
-    r"\text{Seuil de Rentabilité (Break-even)} = "
-    r"\frac{\text{Coût Annuel du CS}}{\text{Marge Nette par Hl}}"
-)
-st.markdown(
-    f"- **Coût Annuel par CS :** {cout_mensuel_cs:,.0f} MGA $\\times$ 12 mois = "
-    f"**{cout_annuel_cs:,.0f} MGA**"
-)
-st.markdown(
-    f"- **Volume nécessaire par CS :** "
-    f"$\\frac{{{cout_annuel_cs:,.0f}}}{{{marge_nette_hl:,.0f}}}=$ "
-    f"**{seuil_rentabilite_hl:,.1f} Hls/an**"
-)
-st.markdown(
-    f"- **Performance actuelle :** {vol_par_cs_agence:,.1f} Hls/an/CS "
-    f"({vol_agence:,.0f} Hls / {cs_agence} CS)"
-)
-
-if vol_par_cs_agence >= seuil_rentabilite_hl:
-    st.success(
-        f"✅ L'agence {selected_fin_agence} est **rentable** "
-        f"(Couverture : **{couverture_besoin:.1f}%**)."
+if not df.empty:
+    fin_cols = st.columns(3)
+    selected_fin_agence = fin_cols[0].selectbox(
+        "Choisir l'Agence pour la simulation financière", df["Agence"].unique()
     )
+    cout_mensuel_cs = fin_cols[1].number_input(
+        "Coût mensuel d'un CS (MGA)", 500000, 5000000, 1500000, 100000
+    )
+    marge_nette_hl = fin_cols[2].number_input(
+        "Marge nette par Hectolitre (MGA/Hl)", 10000, 500000, 50000, 5000
+    )
+
+    row_fin = df.loc[df["Agence"] == selected_fin_agence].iloc[0]
+    vol_agence = row_fin["Vol_2027_Hls"]
+    cs_agence = row_fin["Total_CS_Propose"]
+    vol_par_cs_agence = row_fin["Vol_2027_Par_CS"]
+
+    cout_annuel_cs = cout_mensuel_cs * 12
+    seuil_rentabilite_hl = cout_annuel_cs / marge_nette_hl if marge_nette_hl > 0 else 0
+    couverture_besoin = (
+        (vol_par_cs_agence / seuil_rentabilite_hl) * 100 if seuil_rentabilite_hl > 0 else 0
+    )
+
+    st.info(f"**Mode de calcul & Résultats pour : {selected_fin_agence}**")
+
+    st.latex(
+        r"\text{Seuil de Rentabilité (Break-even)} = "
+        r"\frac{\text{Coût Annuel du CS}}{\text{Marge Nette par Hl}}"
+    )
+    st.markdown(
+        f"- **Coût Annuel par CS :** {cout_mensuel_cs:,.0f} MGA $\\times$ 12 mois = "
+        f"**{cout_annuel_cs:,.0f} MGA**"
+    )
+    st.markdown(
+        f"- **Volume nécessaire par CS :** "
+        f"$\\frac{{{cout_annuel_cs:,.0f}}}{{{marge_nette_hl:,.0f}}}=$ "
+        f"**{seuil_rentabilite_hl:,.1f} Hls/an**"
+    )
+    st.markdown(
+        f"- **Performance actuelle :** {vol_par_cs_agence:,.1f} Hls/an/CS "
+        f"({vol_agence:,.0f} Hls / {cs_agence} CS)"
+    )
+
+    if vol_par_cs_agence >= seuil_rentabilite_hl:
+        st.success(
+            f"✅ L'agence {selected_fin_agence} est **rentable** "
+            f"(Couverture : **{couverture_besoin:.1f}%**)."
+        )
+    else:
+        st.warning(
+            f"⚠️ Productivité en deçà du seuil de rentabilité "
+            f"(Couverture : **{couverture_besoin:.1f}%**)."
+        )
 else:
-    st.warning(
-        f"⚠️ Productivité en deçà du seuil de rentabilité "
-        f"(Couverture : **{couverture_besoin:.1f}%**)."
-    )
+    st.info("Aucune donnée disponible pour la simulation financière.")
 
 # ==========================================
 # 10. CARTE INTERACTIVE (AGENCES + CLIENTS GPS)
 # ==========================================
 st.markdown("---")
-
-# AJOUT DE L'ANCRE POUR LA REDIRECTION
 st.markdown('<div id="section-carte"></div>', unsafe_allow_html=True)
 
 st.subheader("🗺️ Carte Interactive : Agences & Points de Vente Détaillés")
@@ -1136,7 +1165,7 @@ if not df_clients_gps.empty:
             ag_col = c
             break
 
-if ag_col is not None:
+if ag_col is not None and not df.empty:
     selected_agence_map = st.selectbox(
         "Filtrer par Agence :",
         ["Toutes les agences"] + df["Agence"].tolist(),
@@ -1168,7 +1197,6 @@ for c in ["Description activité", "Activite", "Description activite"]:
 color_discrete_map = None
 symbol_map = None
 
-# Configuration des couleurs et symboles pour les PDV
 if color_col is not None:
     unique_vals = df_map_filtered[color_col].astype(str).unique()
     default_palette = px.colors.qualitative.Plotly
@@ -1190,7 +1218,6 @@ if color_col is not None:
             symbol_map[val] = "circle"
             idx += 1
 
-# Création de la carte de base (PDV)
 kwargs = dict(
     lat="Lat", lon="Lon",
     hover_name="Nom client" if "Nom client" in df_map_filtered.columns else None,
@@ -1206,11 +1233,9 @@ if color_col is not None:
     if color_discrete_map is not None:
         kwargs["color_discrete_map"] = color_discrete_map
 
-# On initialise la carte (même si pas de PDV, on la crée pour les agences)
 if not df_map_filtered.empty:
     fig_map = scatter_map_auto(df_map_filtered, **kwargs)
     
-    # Application des symboles pour les PDV
     if color_col is not None and symbol_map is not None:
         for trace in fig_map.data:
             trace_name = trace.name
@@ -1222,7 +1247,6 @@ if not df_map_filtered.empty:
 
     apply_marker_style(fig_map, size=6, opacity=0.75)
 else:
-    # Si aucun PDV, on crée une carte vide centrée sur Mada
     fig_map = scatter_map_auto(
         pd.DataFrame({"Lat": [-18.79], "Lon": [46.85]}),
         lat="Lat", lon="Lon",
@@ -1232,37 +1256,34 @@ else:
         height=650,
         title="Cartographie des Points de Vente & Agences",
     )
-    fig_map.data = []  # On vide la trace pour ne pas afficher de point invisible
+    fig_map.data = []
 
-# --- AJOUT DES AGENCES SUR LA MÊME CARTE (INDÉPENDAMMENT DE L'UPLOAD) ---
-# Filtrage des agences si un filtre d'agence spécifique est sélectionné
-df_agences = df.copy()
-if selected_agence_map != "Toutes les agences":
-    df_agences = df_agences[df_agences["Agence"] == selected_agence_map]
+if not df.empty:
+    df_agences = df.copy()
+    if selected_agence_map != "Toutes les agences":
+        df_agences = df_agences[df_agences["Agence"] == selected_agence_map]
 
-if not df_agences.empty:
-    fig_agences = scatter_map_auto(
-        df_agences,
-        lat="Lat", lon="Lon",
-        hover_name="Agence",
-        hover_data={
-            "Vol_2027_Hls": ":,.0f",
-            "Statut_CS": True, "Statut_MV": True,
-            "Lat": False, "Lon": False,
-        },
-        mapbox_style="open-street-map",
-    )
-    
-    # Personnalisation de l'apparence des agences
-    for trace in fig_agences.data:
-        trace.marker.symbol = "square"  # Symbole Entrepôt (carré)
-        trace.marker.color = "#FF0000"  # Couleur rouge
-        trace.marker.size = 14  # Taille
-        trace.name = "Agences (Entrepôt)"  # Nom de la légende
+    if not df_agences.empty:
+        fig_agences = scatter_map_auto(
+            df_agences,
+            lat="Lat", lon="Lon",
+            hover_name="Agence",
+            hover_data={
+                "Vol_2027_Hls": ":,.0f",
+                "Statut_CS": True, "Statut_MV": True,
+                "Lat": False, "Lon": False,
+            },
+            mapbox_style="open-street-map",
+        )
+        
+        for trace in fig_agences.data:
+            trace.marker.symbol = "square"
+            trace.marker.color = "#FF0000"
+            trace.marker.size = 14
+            trace.name = "Agences (Entrepôt)"
 
-    # Fusion de la trace des agences avec la carte existante
-    for trace_ag in fig_agences.data:
-        fig_map.add_trace(trace_ag)
+        for trace_ag in fig_agences.data:
+            fig_map.add_trace(trace_ag)
 
 st.caption(f"📍 {len(df_clients_gps):,} points de vente chargés.")
 st.plotly_chart(fig_map, use_container_width=True)
@@ -1321,7 +1342,7 @@ for _, row in df.iterrows():
         "Reco Regionale": conseil_transfert,
     })
 
-df_recos = pd.DataFrame(recos_list)
+df_recos = pd.DataFrame(recos_list, columns=["Agence", "Region", "MV Actuels", "CS Actuels", "Vol 2027 Hls", "Vol / CS", "Vol / MV", "PDV / CS", "Statut CS", "Statut MV", "Reco Regionale"])
 csv_buffer = io.StringIO()
 df_recos.to_csv(csv_buffer, index=False, encoding="utf-8-sig")
 st.download_button(
@@ -1330,6 +1351,9 @@ st.download_button(
     file_name="recommandations_commerciales_madagascar.csv",
     mime="text/csv",
 )
+
+if df.empty:
+    st.info("Aucune donnée disponible pour les recommandations.")
 
 for _, row in df.iterrows():
     with st.expander(
@@ -1428,14 +1452,12 @@ for _, row in df.iterrows():
     elif "Surcharge MV" in row["Statut_MV"]:
         action = "Renfort d'Encadrement MV"
 
-    # --- Récupération des modifications sauvegardées ---
     saved_mods = st.session_state.simulations_sauvegardees.get(row["Agence"])
     
     if saved_mods:
         sim_mv = f"{saved_mods['delta_mv']:+d}" if saved_mods['delta_mv'] != 0 else "0"
         sim_cs = f"{saved_mods['delta_cs']:+d}" if saved_mods['delta_cs'] != 0 else "0"
         
-        # Recalcul des statuts avec les modifs sauvegardées
         new_cs = max(1, row['Total_CS_Propose'] + saved_mods['delta_cs'])
         new_mv = max(1, row['MV'] + saved_mods['delta_mv'])
         new_vol_cs = row['Vol_2027_Hls'] / new_cs
@@ -1463,13 +1485,12 @@ for _, row in df.iterrows():
         "Simulation (+/- CS)": sim_cs,
     })
 
-df_recap_final = pd.DataFrame(recap_lignes)
+df_recap_final = pd.DataFrame(recap_lignes, columns=["Région", "Agence", "Volume 2027 (Hls)", "PDV Totaux", "Charge CS (PDV/CS)", "Statut CS", "Statut MV", "Action Proposée", "Simulation (+/- MV)", "Simulation (+/- CS)"])
 st.table(df_recap_final)
 
 # --- Export du tableau récapitulatif stratégique ---
 dl_col1, dl_col2, _ = st.columns([1, 1, 3])
 
-# Export Excel (.xlsx)
 xlsx_buffer = io.BytesIO()
 with pd.ExcelWriter(xlsx_buffer, engine="openpyxl") as writer:
     df_recap_final.to_excel(writer, index=False, sheet_name="Récapitulatif")
