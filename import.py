@@ -239,18 +239,21 @@ if _uploaded_data:
     try:
         df_raw = pd.read_excel(_uploaded_data)
         
-        # 1. NETTOYAGE DES NOMS DE COLONNES (enlever les espaces invisibles et retours à la ligne)
+        # 1. NETTOYAGE STRICT DES COLONNES (Anti-doublons et espaces)
         df_raw.columns = df_raw.columns.astype(str).str.replace('\n', ' ').str.strip()
-        
+        df_raw = df_raw.loc[:, ~df_raw.columns.str.startswith('Unnamed')]
+        df_raw = df_raw.loc[:, ~df_raw.columns.duplicated(keep='first')]
+
         # 2. NETTOYAGE DES LIGNES DE TOTAL
-        agence_col = next((c for c in df_raw.columns if c.lower() == 'agence'), None)
-        if agence_col:
+        agence_cols = [c for c in df_raw.columns if c.lower() == 'agence']
+        if agence_cols:
+            agence_col = agence_cols[0]
             df_raw = df_raw[df_raw[agence_col].notna() & (~df_raw[agence_col].astype(str).str.upper().str.startswith('TOTAL'))]
 
-        # 3. TRADUCTION FLEXIBLE DES COLONNES (cherche les mots-clés même s'il y a des majuscules/minuscules)
+        # 3. TRADUCTION FLEXIBLE DES COLONNES
         rename_dict = {}
         for col in df_raw.columns:
-            col_upper = col.upper()
+            col_upper = str(col).upper()
             if col_upper == 'AGENCE':
                 rename_dict[col] = 'Agence'
             elif 'TOTAL CS' in col_upper or 'CS_ACTUELS' in col_upper:
@@ -265,6 +268,8 @@ if _uploaded_data:
                 rename_dict[col] = 'MV'
         
         df_raw = df_raw.rename(columns=rename_dict)
+        # Supprimer les doublons qui auraient pu être créés par le renommage
+        df_raw = df_raw.loc[:, ~df_raw.columns.duplicated(keep='first')]
 
         # 4. SUPPRESSION DES COLONNES CALCULÉES (si présentes dans le fichier)
         cols_to_drop = ["Total_CS_Propose", "Evol_Vol_Abs", "Evol_Vol_Pct", "PDV_Total_Ajuste", 
@@ -288,11 +293,16 @@ if _uploaded_data:
                         "Nbre_PDV_Tradi", "Temps_Dispo_Mois_Min", "Vol_ZB_Inclut_Mois_Hls", "PDV_Estimes_ZB"]
         for col in numeric_cols:
             if col in df_raw.columns:
+                # Sécurité anti DataFrame au lieu de Series
+                if isinstance(df_raw[col], pd.DataFrame):
+                    df_raw[col] = df_raw[col].iloc[:, 0]
                 df_raw[col] = pd.to_numeric(df_raw[col], errors='coerce').fillna(0)
 
         # 7. RÉCUPÉRATION AUTOMATIQUE DES COORDONNÉES GPS (Lat/Lon)
         base_df = load_base_data()
         if "Lat" not in df_raw.columns or "Lon" not in df_raw.columns:
+            # Supprimer les colonnes partielles pour éviter les doublons au merge
+            df_raw = df_raw.drop(columns=[c for c in ["Lat", "Lon"] if c in df_raw.columns])
             df_raw = df_raw.merge(base_df[["Agence", "Lat", "Lon"]], on="Agence", how="left")
             df_raw["Lat"] = df_raw["Lat"].fillna(-18.79)
             df_raw["Lon"] = df_raw["Lon"].fillna(46.85)
