@@ -338,33 +338,53 @@ else:
     st.warning("⚠️ **En attente de données :** Uploadez un fichier Excel ou sélectionnez 'OUI' pour utiliser les valeurs par défaut.")
 
 # ==========================================
-# 2. PARSING DMS (GPS)
+# 2. PARSING DMS (GPS) - FALLBACK ROBUSTE
 # ==========================================
 def _dms_to_dec_single(txt):
     if not isinstance(txt, str):
         return None, None
+    # Nettoyage des caractères spéciaux fréquents dans les DMS
     s = (txt.replace("?", "°")
             .replace("’", "'").replace("′", "'")
             .replace("″", '"').replace("”", '"')
-            .replace(",", " "))
+            .replace(",", " ")) # Attention : si les coordonnées sont en décimal avec des virgules, cela pose problème, mais on gère plus bas.
+    
+    # 1. Essai de lecture DMS classique
     pattern = r"(\d+)\s*°\s*(\d+)\s*'\s*([\d.]+)\s*\"?\s*([NSEW])"
     matches = re.findall(pattern, s)
-    if len(matches) < 2:
-        return None, None
+    
     lat = lon = None
-    for d, m, sec, dir_ in matches:
-        val = float(d) + float(m) / 60 + float(sec) / 3600
-        if dir_ in ("S", "W"):
-            val = -val
-        if dir_ in ("N", "S"):
-            lat = val
-        else:
-            lon = val
-    return lat, lon
+    if len(matches) >= 2:
+        for d, m, sec, dir_ in matches:
+            val = float(d) + float(m) / 60 + float(sec) / 3600
+            if dir_ in ("S", "W"):
+                val = -val
+            if dir_ in ("N", "S"):
+                lat = val
+            else:
+                lon = val
+        return lat, lon
 
-# ==========================================
-# 3. CHARGEMENT GPS (OPTIMISÉ POUR CSV ET MÉMOIRE)
-# ==========================================
+    # 2. FALLBACK : Si c'est du décimal (ex: -18.64048611), on le trouve
+    # On cherche les nombres décimaux
+    nums = re.findall(r"-?\d+[.,]?\d+", txt)
+    if len(nums) >= 2:
+        try:
+            # On teste les combinaisons possibles
+            for i in range(len(nums)-1):
+                v1 = float(nums[i].replace(',', '.'))
+                v2 = float(nums[i+1].replace(',', '.'))
+                # Si v1 ressemble à une latitude de Madagascar (-11 à -26)
+                if -26 <= v1 <= -11 and 42 <= v2 <= 51:
+                    return v1, v2
+                # Si v2 ressemble à une latitude
+                if -26 <= v2 <= -11 and 42 <= v1 <= 51:
+                    return v2, v1
+        except:
+            pass
+            
+    return None, None
+
 def _find_gps_column(columns):
     alias = (
         "gps", "coordonnees", "coordonnées", "coordonnee", "coordonnée",
@@ -376,24 +396,32 @@ def _find_gps_column(columns):
             return col
     return None
 
+# ==========================================
+# 3. CHARGEMENT GPS (OPTIMISÉ ET BLINDÉ)
+# ==========================================
 @st.cache_data
 def load_gps_data(_uploaded_file=None):
     if _uploaded_file is None:
         return pd.DataFrame()
 
-    # NOUVEAU : Si c'est un CSV, on le lit directement (ultra rapide)
-    if _uploaded_file.name.endswith('.csv'):
+    df_gps = None
+    file_name = _uploaded_file.name
+
+    if file_name.endswith('.csv'):
         try:
+            # 1. Essayer avec le sniffer automatique de Pandas (détecte ; ou ,)
             try:
-                # Ajout de on_bad_lines='skip' pour ignorer les lignes avec des virgules en trop
-                df_gps = pd.read_csv(_uploaded_file, encoding='utf-8', on_bad_lines='skip')
-            except UnicodeDecodeError:
-                df_gps = pd.read_csv(_uploaded_file, encoding='latin1', on_bad_lines='skip')
+                df_gps = pd.read_csv(_uploaded_file, sep=None, engine='python', on_bad_lines='skip', encoding='utf-8')
+            except Exception:
+                # 2. Si échec, essayer avec le point-virgule typique des exports français
+                try:
+                    df_gps = pd.read_csv(_uploaded_file, sep=';', on_bad_lines='skip', encoding='utf-8')
+                except Exception:
+                    # 3. Dernier recours, forcer la virgule
+                    df_gps = pd.read_csv(_uploaded_file, sep=',', on_bad_lines='skip', encoding='utf-8')
         except Exception as e:
             st.error(f"❌ Erreur de lecture du CSV : {e}")
             return pd.DataFrame()
-            
-    # Si c'est un Excel (pour garder la compatibilité)
     else:
         try:
             xls = pd.ExcelFile(_uploaded_file)
@@ -425,14 +453,29 @@ def load_gps_data(_uploaded_file=None):
     # --- Suite du traitement normal ---
     df_gps.columns = [str(c).strip() for c in df_gps.columns]
 
+    # Si la première ligne est un en-tête bizarre
     if not df_gps.empty and str(df_gps.iloc[0].get("Ag", "")).strip() == "Ag":
         df_gps = df_gps.iloc[1:].reset_index(drop=True)
 
+    # Chercher la colonne GPS
     gps_col = _find_gps_column(df_gps.columns)
+    
+    # --- LA MAGIE : Si on ne trouve pas de colonne "GPS" nommée explicitement ---
     if gps_col is None:
-        st.error(f"❌ Aucune colonne GPS trouvée. Colonnes disponibles : {list(df_gps.columns)}")
+        # On scanne toutes les colonnes pour trouver celle qui contient les coordonnées
+        for col in df_gps.columns:
+            # On vérifie la première valeur non nulle de la colonne
+            sample_val = str(df_gps[col].dropna().iloc[0]) if not df_gps[col].dropna().empty else ""
+            # Si ça ressemble à des coordonnées (contient un °, un ?, un N,S,E,W et des chiffres)
+            if (re.search(r"[\d]+\s*[?°']", sample_val) and re.search(r"[NSEW]", sample_val)) or re.search(r"-?\d+\.\d+", sample_val):
+                gps_col = col
+                break
+
+    if gps_col is None:
+        st.error(f"❌ Impossible de trouver des coordonnées GPS. Aperçu des colonnes : {list(df_gps.columns)}")
         return pd.DataFrame()
 
+    # Application de la fonction de conversion
     coords = df_gps[gps_col].apply(_dms_to_dec_single)
     df_gps["Lat"] = [c[0] for c in coords]
     df_gps["Lon"] = [c[1] for c in coords]
@@ -450,7 +493,10 @@ def load_gps_data(_uploaded_file=None):
 if _uploaded_gps:
     with st.spinner("Chargement et calcul des coordonnées GPS... (Veuillez patienter)"):
         df_clients_gps = load_gps_data(_uploaded_gps)
-    st.success(f"✅ Fichier GPS chargé — {len(df_clients_gps):,} points valides.")
+    if not df_clients_gps.empty:
+        st.success(f"✅ Fichier GPS chargé — {len(df_clients_gps):,} points valides.")
+    else:
+        st.warning("⚠️ Le fichier GPS a été lu, mais aucun point valide n'a été trouvé.")
 else:
     df_clients_gps = pd.DataFrame()
 
