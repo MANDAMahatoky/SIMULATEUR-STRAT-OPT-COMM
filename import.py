@@ -2,6 +2,7 @@ import io
 import os
 import re
 import base64
+import gc  # <-- AJOUT ICI (Gestion de la mémoire)
 import numpy as np
 import pandas as pd
 import plotly.express as px
@@ -227,8 +228,8 @@ with col_upload1:
 
 with col_upload2:
     _uploaded_gps = st.file_uploader(
-        "2. Charger le fichier Excel des coordonnées GPS (Coord_GPS.xlsx)",
-        type=["xlsx", "xls"],
+        "2. Charger le fichier GPS (Coord_GPS.csv ou .xlsx)", # <-- MODIFIÉ ICI
+        type=["csv", "xlsx", "xls"], # <-- MODIFIÉ ICI
         key="upload_gps"
     )
 
@@ -362,7 +363,7 @@ def _dms_to_dec_single(txt):
     return lat, lon
 
 # ==========================================
-# 3. CHARGEMENT GPS
+# 3. CHARGEMENT GPS (OPTIMISÉ POUR CSV ET MÉMOIRE)
 # ==========================================
 def _find_gps_column(columns):
     alias = (
@@ -380,41 +381,47 @@ def load_gps_data(_uploaded_file=None):
     if _uploaded_file is None:
         return pd.DataFrame()
 
-    source = _uploaded_file
-    try:
-        xls = pd.ExcelFile(source)
-        sheet_names = xls.sheet_names
-    except Exception as e:
-        st.error(f"❌ Impossible d'ouvrir le classeur GPS : {e}")
-        return pd.DataFrame()
-
-    sheet_to_use = None
-    for sh in sheet_names:
+    # NOUVEAU : Si c'est un CSV, on le lit directement (ultra rapide)
+    if _uploaded_file.name.endswith('.csv'):
         try:
-            tmp = pd.read_excel(source, sheet_name=sh, nrows=5)
-            tmp.columns = [str(c).strip() for c in tmp.columns]
-            if _find_gps_column(tmp.columns) is not None:
-                sheet_to_use = sh
-                break
-        except Exception:
-            continue
+            try:
+                df_gps = pd.read_csv(_uploaded_file, encoding='utf-8')
+            except UnicodeDecodeError:
+                df_gps = pd.read_csv(_uploaded_file, encoding='latin1')
+        except Exception as e:
+            st.error(f"❌ Erreur de lecture du CSV : {e}")
+            return pd.DataFrame()
+            
+    # Si c'est un Excel (pour garder la compatibilité)
+    else:
+        try:
+            xls = pd.ExcelFile(_uploaded_file)
+            sheet_names = xls.sheet_names
+            sheet_to_use = None
+            
+            for sh in sheet_names:
+                try:
+                    tmp = pd.read_excel(_uploaded_file, sheet_name=sh, nrows=5)
+                    tmp.columns = [str(c).strip() for c in tmp.columns]
+                    if _find_gps_column(tmp.columns) is not None:
+                        sheet_to_use = sh
+                        break
+                except Exception:
+                    continue
+            
+            if sheet_to_use is None:
+                for c in ["Feuil1", "Feuille1", "Sheet1", "GPS", "Coordonnees", "Coordonnées", "Data", "Clients"]:
+                    if c in sheet_names:
+                        sheet_to_use = c
+                        break
+            if sheet_to_use is None: sheet_to_use = sheet_names[0]
+            
+            df_gps = pd.read_excel(_uploaded_file, sheet_name=sheet_to_use)
+        except Exception as e:
+            st.error(f"❌ Erreur de lecture Excel : {e}")
+            return pd.DataFrame()
 
-    if sheet_to_use is None:
-        for c in ["Feuil1", "Feuille1", "Sheet1", "GPS", "Coordonnees",
-                  "Coordonnées", "Data", "Clients"]:
-            if c in sheet_names:
-                sheet_to_use = c
-                break
-
-    if sheet_to_use is None:
-        sheet_to_use = sheet_names[0]
-
-    try:
-        df_gps = pd.read_excel(source, sheet_name=sheet_to_use)
-    except Exception as e:
-        st.error(f"❌ Erreur de lecture de la feuille GPS `{sheet_to_use}` : {e}")
-        return pd.DataFrame()
-
+    # --- Suite du traitement normal ---
     df_gps.columns = [str(c).strip() for c in df_gps.columns]
 
     if not df_gps.empty and str(df_gps.iloc[0].get("Ag", "")).strip() == "Ag":
@@ -422,10 +429,7 @@ def load_gps_data(_uploaded_file=None):
 
     gps_col = _find_gps_column(df_gps.columns)
     if gps_col is None:
-        st.error(
-            f"❌ Aucune colonne GPS trouvée. Colonnes disponibles : "
-            f"{list(df_gps.columns)}"
-        )
+        st.error(f"❌ Aucune colonne GPS trouvée. Colonnes disponibles : {list(df_gps.columns)}")
         return pd.DataFrame()
 
     coords = df_gps[gps_col].apply(_dms_to_dec_single)
@@ -437,13 +441,17 @@ def load_gps_data(_uploaded_file=None):
         df_gps["Lat"].between(-26, -11) & df_gps["Lon"].between(42, 51)
     ]
 
-    st.success(
-        f"✅ Fichier GPS chargé — feuille `{sheet_to_use}` — "
-        f"{len(df_gps):,} points valides."
-    )
+    # LIGNE MAGIQUE : Force Python à vider la mémoire RAM inutile
+    gc.collect() 
+
     return df_gps.reset_index(drop=True)
 
-df_clients_gps = load_gps_data(_uploaded_gps) if _uploaded_gps else pd.DataFrame()
+if _uploaded_gps:
+    with st.spinner("Chargement et calcul des coordonnées GPS... (Veuillez patienter)"):
+        df_clients_gps = load_gps_data(_uploaded_gps)
+    st.success(f"✅ Fichier GPS chargé — {len(df_clients_gps):,} points valides.")
+else:
+    df_clients_gps = pd.DataFrame()
 
 # ==========================================
 # AJOUT DU LIEN DE REDIRECTION VERS LA CARTE
