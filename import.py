@@ -2,7 +2,7 @@ import io
 import os
 import re
 import base64
-import gc  # <-- AJOUT ICI (Gestion de la mémoire)
+import gc  # Gestion de la mémoire
 import numpy as np
 import pandas as pd
 import plotly.express as px
@@ -228,8 +228,8 @@ with col_upload1:
 
 with col_upload2:
     _uploaded_gps = st.file_uploader(
-        "2. Charger le fichier GPS (Coord_GPS.csv ou .xlsx)", # <-- MODIFIÉ ICI
-        type=["csv", "xlsx", "xls"], # <-- MODIFIÉ ICI
+        "2. Charger le fichier GPS (Coord_GPS.csv ou .xlsx)",
+        type=["csv", "xlsx", "xls"],
         key="upload_gps"
     )
 
@@ -385,9 +385,10 @@ def load_gps_data(_uploaded_file=None):
     if _uploaded_file.name.endswith('.csv'):
         try:
             try:
-                df_gps = pd.read_csv(_uploaded_file, encoding='utf-8')
+                # Ajout de on_bad_lines='skip' pour ignorer les lignes avec des virgules en trop
+                df_gps = pd.read_csv(_uploaded_file, encoding='utf-8', on_bad_lines='skip')
             except UnicodeDecodeError:
-                df_gps = pd.read_csv(_uploaded_file, encoding='latin1')
+                df_gps = pd.read_csv(_uploaded_file, encoding='latin1', on_bad_lines='skip')
         except Exception as e:
             st.error(f"❌ Erreur de lecture du CSV : {e}")
             return pd.DataFrame()
