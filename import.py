@@ -200,6 +200,14 @@ def load_base_data():
     return pd.DataFrame(data)
 
 # ==========================================
+# INITIALISATION DE L'HISTORIQUE ZB
+# ==========================================
+if "historique_zb" not in st.session_state:
+    st.session_state.historique_zb = []
+if "show_zb_history" not in st.session_state:
+    st.session_state.show_zb_history = False
+
+# ==========================================
 # UPLOAD ET CHOIX OUI/NON AVEC CALLBACK ET TRADUCTION ROBUSTE
 # ==========================================
 if "radio_defaults" not in st.session_state:
@@ -209,6 +217,7 @@ def handle_upload_change():
     st.session_state.radio_defaults = "NON"
     # NOUVEAU : On vide les simulations sauvegardées si on change de fichier
     st.session_state.simulations_sauvegardees = {}
+    st.session_state.historique_zb = []
 
 col_upload1, col_upload2 = st.columns(2)
 
@@ -493,6 +502,32 @@ if not df_raw.empty:
     sim_zb_vol_mois = st.sidebar.number_input(f"Volume ZB Mensuel ({selected_agence_zb})", value=default_zb_vol)
     sim_zb_pdv = st.sidebar.number_input(f"PDV ZB ({selected_agence_zb})", value=default_zb_pdv)
     
+    # BOUTONS ZB (Enregistrer et Historique)
+    col_btn_zb1, col_btn_zb2 = st.sidebar.columns(2)
+    with col_btn_zb1:
+        if st.button("💾 Enregistrer", key="save_zb", use_container_width=True):
+            st.session_state.historique_zb.append({
+                "Agence": selected_agence_zb,
+                "Volume ZB": sim_zb_vol_mois,
+                "PDV ZB": sim_zb_pdv
+            })
+            st.success("Simulation ZB enregistrée !")
+    with col_btn_zb2:
+        if st.button("📜 Historique", key="show_zb_hist", use_container_width=True):
+            st.session_state.show_zb_history = not st.session_state.show_zb_history
+
+    # AFFICHAGE DE L'HISTORIQUE ZB
+    if st.session_state.show_zb_history:
+        with st.sidebar.expander("📋 Historique ZB", expanded=True):
+            if st.session_state.historique_zb:
+                df_hist = pd.DataFrame(st.session_state.historique_zb)
+                st.dataframe(df_hist, hide_index=True, use_container_width=True)
+                if st.button("🗑️ Vider l'historique", use_container_width=True):
+                    st.session_state.historique_zb = []
+                    st.rerun()
+            else:
+                st.info("Aucune simulation ZB enregistrée.")
+
     df = df_raw.copy()
     df.loc[df["Agence"] == selected_agence_zb, "Vol_ZB_Inclut_Mois_Hls"] = sim_zb_vol_mois
     df.loc[df["Agence"] == selected_agence_zb, "PDV_Estimes_ZB"] = sim_zb_pdv
@@ -768,7 +803,6 @@ else:
 
     lignes = []
     for ag, m in sims_actives.items():
-        # SÉCURITÉ : On vérifie que l'agence existe toujours dans le tableau actuel
         if ag in df["Agence"].values:
             a = df.loc[df["Agence"] == ag].iloc[0]
             b = df_apres.loc[df_apres["Agence"] == ag].iloc[0]
