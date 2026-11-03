@@ -524,7 +524,6 @@ if not df_raw.empty:
     col_btn_zb1, col_btn_zb2 = st.sidebar.columns(2)
     with col_btn_zb1:
         if st.button("💾 Enregistrer", key="save_zb", use_container_width=True):
-            # Ajout d'un timestamp pour tracer l'historique
             nouvelle_sim = {
                 "Date": pd.Timestamp.now().strftime("%Y-%m-%d %H:%M"),
                 "Agence": selected_agence_zb,
@@ -532,36 +531,42 @@ if not df_raw.empty:
                 "PDV ZB": sim_zb_pdv
             }
             st.session_state.historique_zb.append(nouvelle_sim)
-            save_history(st.session_state.historique_zb) # Sauvegarde persistante (fichier JSON)
+            save_history(st.session_state.historique_zb) 
             st.success("Simulation ZB enregistrée !")
     with col_btn_zb2:
         if st.button("📜 Historique", key="show_zb_hist", use_container_width=True):
             st.session_state.show_zb_history = not st.session_state.show_zb_history
 
-    # AFFICHAGE DE L'HISTORIQUE ZB
+    # AFFICHAGE DE L'HISTORIQUE ZB (FILTRÉ PAR AGENCE)
     if st.session_state.show_zb_history:
-        with st.sidebar.expander("📋 Historique ZB", expanded=True):
+        with st.sidebar.expander(f"📋 Historique ZB - {selected_agence_zb}", expanded=True):
             if st.session_state.historique_zb:
-                df_hist = pd.DataFrame(st.session_state.historique_zb)
-                st.dataframe(df_hist, hide_index=True, use_container_width=True)
+                df_hist_full = pd.DataFrame(st.session_state.historique_zb)
                 
-                # Option d'export de l'historique (crucial pour Streamlit Cloud)
-                csv_hist = df_hist.to_csv(index=False, encoding="utf-8-sig")
-                st.download_button(
-                    label="📥 Exporter l'historique (CSV)",
-                    data=csv_hist,
-                    file_name="historique_zb.csv",
-                    mime="text/csv",
-                    use_container_width=True,
-                    key="dl_hist_zb"
-                )
+                # Filtrer pour ne garder que l'agence sélectionnée
+                df_hist_agence = df_hist_full[df_hist_full["Agence"] == selected_agence_zb]
                 
-                if st.button("🗑️ Vider l'historique", use_container_width=True):
+                if not df_hist_agence.empty:
+                    st.dataframe(df_hist_agence, hide_index=True, use_container_width=True)
+                    
+                    csv_hist = df_hist_agence.to_csv(index=False, encoding="utf-8-sig")
+                    st.download_button(
+                        label="📥 Exporter l'historique (CSV)",
+                        data=csv_hist,
+                        file_name=f"historique_zb_{selected_agence_zb}.csv",
+                        mime="text/csv",
+                        use_container_width=True,
+                        key="dl_hist_zb"
+                    )
+                else:
+                    st.info(f"Aucune simulation enregistrée pour {selected_agence_zb}.")
+                
+                if st.button("🗑️ Vider tout l'historique", use_container_width=True):
                     st.session_state.historique_zb = []
                     save_history([])
                     st.rerun()
             else:
-                st.info("Aucune simulation ZB enregistrée.")
+                st.info("Aucune simulation ZB enregistrée dans l'application.")
 
     df = df_raw.copy()
     df.loc[df["Agence"] == selected_agence_zb, "Vol_ZB_Inclut_Mois_Hls"] = sim_zb_vol_mois
