@@ -450,7 +450,7 @@ if not df_clients_gps.empty:
     )
 
 # ==========================================
-# 4. SIDEBAR — PARAMÈTRES ET SEUILS
+# 4. SIDEBAR — PARAMÈTRES ET SEUILS (SANS BORNES)
 # ==========================================
 st.sidebar.markdown(
     f"""
@@ -463,23 +463,23 @@ st.sidebar.markdown(
 
 st.sidebar.header("⚙️ Paramètres & Seuils d'Évaluation")
 
-obj_visites_jour = st.sidebar.number_input("Objectif Visites max / Commercial / Jour", 1, 35, 22)
-jours_travailles_mois = st.sidebar.number_input("Jours travaillés / mois", 15, 26, 20)
-temps_moyen_visite_min = st.sidebar.number_input("Temps moyen par visite (min)", 10, 90, 30)
-cible_vol_cs = st.sidebar.number_input("Volume Cible par CS (Hls/an)", 1000, 50000, 25000, 1000)
+obj_visites_jour = st.sidebar.number_input("Objectif Visites max / Commercial / Jour", value=22)
+jours_travailles_mois = st.sidebar.number_input("Jours travaillés / mois", value=20)
+temps_moyen_visite_min = st.sidebar.number_input("Temps moyen par visite (min)", value=30)
+cible_vol_cs = st.sidebar.number_input("Volume Cible par CS (Hls/an)", value=25000, step=1000)
 
 st.sidebar.subheader("Seuils de Charge CS (PDV)")
-seuil_surcharge_cs = st.sidebar.number_input("Seuil Surcharge CS (> X PDV)", 200, 500, 250)
-seuil_risque_cs = st.sidebar.number_input("Seuil Risque CS (> X PDV)", 180, 400, 210)
-seuil_sous_charge_cs = st.sidebar.number_input("Seuil Sous-charge CS (< X PDV)", 50, 200, 150)
+seuil_surcharge_cs = st.sidebar.number_input("Seuil Surcharge CS (> X PDV)", value=250)
+seuil_risque_cs = st.sidebar.number_input("Seuil Risque CS (> X PDV)", value=210)
+seuil_sous_charge_cs = st.sidebar.number_input("Seuil Sous-charge CS (< X PDV)", value=150)
 
 st.sidebar.subheader("Seuils de Charge CS (Volume)")
-seuil_surcharge_vol_cs = st.sidebar.number_input("Seuil Surcharge Vol (> X Hls)", 20000, 100000, 30000, 1000)
-seuil_risque_vol_cs = st.sidebar.number_input("Seuil Risque Vol (> X Hls)", 15000, 80000, 27000, 1000)
-seuil_sous_charge_vol_cs = st.sidebar.number_input("Seuil Sous-charge Vol (< X Hls)", 5000, 50000, 20000, 1000)
+seuil_surcharge_vol_cs = st.sidebar.number_input("Seuil Surcharge Vol (> X Hls)", value=30000, step=1000)
+seuil_risque_vol_cs = st.sidebar.number_input("Seuil Risque Vol (> X Hls)", value=27000, step=1000)
+seuil_sous_charge_vol_cs = st.sidebar.number_input("Seuil Sous-charge Vol (< X Hls)", value=20000, step=1000)
 
 st.sidebar.subheader("Seuil de Charge MV")
-seuil_surcharge_mv = st.sidebar.number_input("Seuil Surcharge MV (> X Hls vol)", 20000, 500000, 200000)
+seuil_surcharge_mv = st.sidebar.number_input("Seuil Surcharge MV (> X Hls vol)", value=200000, step=1000)
 
 st.sidebar.subheader("🎯 Simulation Zones Blanches par Agence")
 
@@ -488,8 +488,8 @@ if not df_raw.empty:
     default_zb_vol = int(df_raw.loc[df_raw["Agence"] == selected_agence_zb, "Vol_ZB_Inclut_Mois_Hls"].values[0])
     default_zb_pdv = int(df_raw.loc[df_raw["Agence"] == selected_agence_zb, "PDV_Estimes_ZB"].values[0])
     
-    sim_zb_vol_mois = st.sidebar.number_input(f"Volume ZB Mensuel ({selected_agence_zb})", 0, 10000, default_zb_vol)
-    sim_zb_pdv = st.sidebar.number_input(f"PDV ZB ({selected_agence_zb})", 0, 2000, default_zb_pdv)
+    sim_zb_vol_mois = st.sidebar.number_input(f"Volume ZB Mensuel ({selected_agence_zb})", value=default_zb_vol)
+    sim_zb_pdv = st.sidebar.number_input(f"PDV ZB ({selected_agence_zb})", value=default_zb_pdv)
     
     df = df_raw.copy()
     df.loc[df["Agence"] == selected_agence_zb, "Vol_ZB_Inclut_Mois_Hls"] = sim_zb_vol_mois
@@ -633,8 +633,8 @@ if not df.empty:
     default_cs = st.session_state.simulations_sauvegardees.get(selected_sim_agence, {}).get("delta_cs", 0)
     default_mv = st.session_state.simulations_sauvegardees.get(selected_sim_agence, {}).get("delta_mv", 0)
 
-    delta_cs = sc2.number_input("Ajustement CS (+/- Recrutement/Transfert)", -15, 15, default_cs, step=1, key=f"sim_delta_cs_{selected_sim_agence}")
-    delta_mv = sc3.number_input("Ajustement MV (+/- Recrutement/Transfert)", -5, 5, default_mv, step=1, key=f"sim_delta_mv_{selected_sim_agence}")
+    delta_cs = sc2.number_input("Ajustement CS (+/- Recrutement/Transfert)", value=default_cs, step=1, key=f"sim_delta_cs_{selected_sim_agence}")
+    delta_mv = sc3.number_input("Ajustement MV (+/- Recrutement/Transfert)", value=default_mv, step=1, key=f"sim_delta_mv_{selected_sim_agence}")
 
     row_sim_orig = df.loc[df["Agence"] == selected_sim_agence].iloc[0]
     mv_avant, cs_avant = row_sim_orig["MV"], row_sim_orig["Total_CS_Propose"]
@@ -787,8 +787,8 @@ st.subheader("💰 Simulation Financière & Point Mort (Break-even) par Agence")
 if not df.empty:
     fin_cols = st.columns(3)
     selected_fin_agence = fin_cols[0].selectbox("Choisir l'Agence pour la simulation financière", df["Agence"].unique())
-    cout_mensuel_cs = fin_cols[1].number_input("Coût mensuel d'un CS (MGA)", 500000, 5000000, 1500000, 100000)
-    marge_nette_hl = fin_cols[2].number_input("Marge nette par Hectolitre (MGA/Hl)", 10000, 500000, 50000, 5000)
+    cout_mensuel_cs = fin_cols[1].number_input("Coût mensuel d'un CS (MGA)", value=1500000, step=100000)
+    marge_nette_hl = fin_cols[2].number_input("Marge nette par Hectolitre (MGA/Hl)", value=50000, step=5000)
 
     row_fin = df.loc[df["Agence"] == selected_fin_agence].iloc[0]
     vol_agence, cs_agence, vol_par_cs_agence = row_fin["Vol_2027_Hls"], row_fin["Total_CS_Propose"], row_fin["Vol_2027_Par_CS"]
