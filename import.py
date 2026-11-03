@@ -234,7 +234,7 @@ if "radio_defaults" not in st.session_state:
 
 def handle_upload_change():
     st.session_state.radio_defaults = "NON"
-    # NOUVEAU : On vide les simulations sauvegardées si on change de fichier
+    # On vide les simulations sauvegardées si on change de fichier
     st.session_state.simulations_sauvegardees = {}
 
 col_upload1, col_upload2 = st.columns(2)
@@ -733,23 +733,24 @@ if not df.empty:
     statut_pdv_apres = get_statut_pdv_cs(pdv_cs_apres)
     statut_mv_apres = get_statut_mv(vol_mv_apres)
 
+    # STRUCTURATION DU TABLEAU DEMANDÉE (Regroupement des statuts CS)
     df_sim_comp = pd.DataFrame({
         "Dimension": [
             "Effectif MV", "Effectif CS", "Ratio CS / 1 MV", 
-            "Volume / CS (Hls/an)", "Statut Vol/CS",
-            "Charge PDV / CS", "Statut PDV/CS",
-            "Volume / MV (Hls/an)", "Statut MV"
+            "Volume / CS (Hls/an)", "Charge PDV / CS",
+            "STATUT CS / Volume", "STATUT CS / PDV", 
+            "Volume / MV (Hls/an)", "STATUT MV"
         ],
         "Situation AVANT": [
             f"{mv_avant}", f"{cs_avant}", f"{cs_avant / mv_avant:.1f}", 
-            f"{vol_cs_avant:,.0f}", statut_vol_avant,
-            f"{pdv_cs_avant:.1f}", statut_pdv_avant,
+            f"{vol_cs_avant:,.0f}", f"{pdv_cs_avant:.1f}",
+            statut_vol_avant, statut_pdv_avant,
             f"{vol_mv_avant:,.0f}", statut_mv_avant
         ],
         "Situation APRÈS (Simulation)": [
             f"{mv_apres} ({delta_mv:+d})", f"{cs_apres} ({delta_cs:+d})", f"{cs_apres / mv_apres:.1f}", 
-            f"{vol_cs_apres:,.0f}", statut_vol_apres,
-            f"{pdv_cs_apres:.1f}", statut_pdv_apres,
+            f"{vol_cs_apres:,.0f}", f"{pdv_cs_apres:.1f}",
+            statut_vol_apres, statut_pdv_apres,
             f"{vol_mv_apres:,.0f}", statut_mv_apres
         ],
     })
