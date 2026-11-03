@@ -207,6 +207,8 @@ if "radio_defaults" not in st.session_state:
 
 def handle_upload_change():
     st.session_state.radio_defaults = "NON"
+    # NOUVEAU : On vide les simulations sauvegardées si on change de fichier
+    st.session_state.simulations_sauvegardees = {}
 
 col_upload1, col_upload2 = st.columns(2)
 
@@ -766,17 +768,20 @@ else:
 
     lignes = []
     for ag, m in sims_actives.items():
-        a = df.loc[df["Agence"] == ag].iloc[0]
-        b = df_apres.loc[df_apres["Agence"] == ag].iloc[0]
-        lignes.append({
-            "Agence": ag, "Δ CS": f"{m['delta_cs']:+d}", "Δ MV": f"{m['delta_mv']:+d}", 
-            "Vol/CS Avant": f"{a['Vol_2027_Par_CS']:,.0f}", "Vol/CS Après": f"{b['Vol_2027_Par_CS']:,.0f}",
-            "PDV/CS Avant": f"{a['PDV_Par_CS']:.1f}", "PDV/CS Après": f"{b['PDV_Par_CS']:.1f}",
-            "Statut Vol Avant": a["Statut_Vol_CS"], "Statut Vol Après": get_statut_vol_cs(b["Vol_2027_Par_CS"]),
-            "Statut PDV Avant": a["Statut_PDV_CS"], "Statut PDV Après": get_statut_pdv_cs(b["PDV_Par_CS"]),
-        })
-    st.markdown("**Agences modifiées par les simulations enregistrées :**")
-    st.dataframe(pd.DataFrame(lignes).style.map(color_status_cells, subset=["Statut Vol Avant", "Statut Vol Après", "Statut PDV Avant", "Statut PDV Après"]), use_container_width=True, hide_index=True)
+        # SÉCURITÉ : On vérifie que l'agence existe toujours dans le tableau actuel
+        if ag in df["Agence"].values:
+            a = df.loc[df["Agence"] == ag].iloc[0]
+            b = df_apres.loc[df_apres["Agence"] == ag].iloc[0]
+            lignes.append({
+                "Agence": ag, "Δ CS": f"{m['delta_cs']:+d}", "Δ MV": f"{m['delta_mv']:+d}", 
+                "Vol/CS Avant": f"{a['Vol_2027_Par_CS']:,.0f}", "Vol/CS Après": f"{b['Vol_2027_Par_CS']:,.0f}",
+                "PDV/CS Avant": f"{a['PDV_Par_CS']:.1f}", "PDV/CS Après": f"{b['PDV_Par_CS']:.1f}",
+                "Statut Vol Avant": a["Statut_Vol_CS"], "Statut Vol Après": get_statut_vol_cs(b["Vol_2027_Par_CS"]),
+                "Statut PDV Avant": a["Statut_PDV_CS"], "Statut PDV Après": get_statut_pdv_cs(b["PDV_Par_CS"]),
+            })
+    if lignes:
+        st.markdown("**Agences modifiées par les simulations enregistrées :**")
+        st.dataframe(pd.DataFrame(lignes).style.map(color_status_cells, subset=["Statut Vol Avant", "Statut Vol Après", "Statut PDV Avant", "Statut PDV Après"]), use_container_width=True, hide_index=True)
 
 # ==========================================
 # 9. SIMULATION FINANCIÈRE
