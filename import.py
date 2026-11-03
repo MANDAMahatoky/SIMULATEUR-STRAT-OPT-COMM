@@ -200,7 +200,7 @@ def load_base_data():
     return pd.DataFrame(data)
 
 # ==========================================
-# NOUVEAU : UPLOAD ET CHOIX OUI/NON AVEC CALLBACK ET TRADUCTION ROBUSTE
+# UPLOAD ET CHOIX OUI/NON AVEC CALLBACK ET TRADUCTION ROBUSTE
 # ==========================================
 if "radio_defaults" not in st.session_state:
     st.session_state.radio_defaults = "NON"
@@ -240,70 +240,48 @@ if _uploaded_data:
     try:
         df_raw = pd.read_excel(_uploaded_data)
         
-        # 1. NETTOYAGE STRICT DES COLONNES (Anti-doublons et espaces)
         df_raw.columns = df_raw.columns.astype(str).str.replace('\n', ' ').str.strip()
         df_raw = df_raw.loc[:, ~df_raw.columns.str.startswith('Unnamed')]
         df_raw = df_raw.loc[:, ~df_raw.columns.duplicated(keep='first')]
 
-        # 2. NETTOYAGE DES LIGNES DE TOTAL
         agence_cols = [c for c in df_raw.columns if c.lower() == 'agence']
         if agence_cols:
             agence_col = agence_cols[0]
             df_raw = df_raw[df_raw[agence_col].notna() & (~df_raw[agence_col].astype(str).str.upper().str.startswith('TOTAL'))]
 
-        # 3. TRADUCTION FLEXIBLE DES COLONNES
         rename_dict = {}
         for col in df_raw.columns:
             col_upper = str(col).upper()
-            if col_upper == 'AGENCE':
-                rename_dict[col] = 'Agence'
-            elif 'TOTAL CS' in col_upper or 'CS_ACTUELS' in col_upper:
-                rename_dict[col] = 'CS_Actuels'
-            elif 'VOLUME 2026' in col_upper or 'VOL_2026_HLS' in col_upper:
-                rename_dict[col] = 'Vol_2026_Hls'
-            elif 'VOLUME 2027' in col_upper or 'VOL_2027_HLS' in col_upper:
-                rename_dict[col] = 'Vol_2027_Hls'
-            elif 'UNIVERS TRADI' in col_upper or 'NBRE_PDV_TRADI' in col_upper:
-                rename_dict[col] = 'Nbre_PDV_Tradi'
-            elif col_upper == 'MV':
-                rename_dict[col] = 'MV'
-            elif 'RÉGION' in col_upper or 'REGION' in col_upper:
-                rename_dict[col] = 'Région'
+            if col_upper == 'AGENCE': rename_dict[col] = 'Agence'
+            elif 'TOTAL CS' in col_upper or 'CS_ACTUELS' in col_upper: rename_dict[col] = 'CS_Actuels'
+            elif 'VOLUME 2026' in col_upper or 'VOL_2026_HLS' in col_upper: rename_dict[col] = 'Vol_2026_Hls'
+            elif 'VOLUME 2027' in col_upper or 'VOL_2027_HLS' in col_upper: rename_dict[col] = 'Vol_2027_Hls'
+            elif 'UNIVERS TRADI' in col_upper or 'NBRE_PDV_TRADI' in col_upper: rename_dict[col] = 'Nbre_PDV_Tradi'
+            elif col_upper == 'MV': rename_dict[col] = 'MV'
+            elif 'RÉGION' in col_upper or 'REGION' in col_upper: rename_dict[col] = 'Région'
         
         df_raw = df_raw.rename(columns=rename_dict)
         df_raw = df_raw.loc[:, ~df_raw.columns.duplicated(keep='first')]
 
-        # 4. REMPLIR LA COLONNE RÉGION (Correction pour les cellules fusionnées Excel)
         if "Région" in df_raw.columns:
             df_raw["Région"] = df_raw["Région"].ffill()
         else:
             df_raw["Région"] = "Inconnue"
 
-        # 5. SUPPRESSION DES COLONNES CALCULÉES (si présentes dans le fichier)
-        cols_to_drop = ["Total_CS_Propose", "Evol_Vol_Abs", "Evol_Vol_Pct", "PDV_Total_Ajuste", 
-                        "Vol_2027_Par_CS", "Vol_2027_Par_MV", "PDV_Par_CS", "PDV_Par_MV", "Ratio_CS_MV"]
+        cols_to_drop = ["Total_CS_Propose", "Evol_Vol_Abs", "Evol_Vol_Pct", "PDV_Total_Ajuste", "Vol_2027_Par_CS", "Vol_2027_Par_MV", "PDV_Par_CS", "PDV_Par_MV", "Ratio_CS_MV"]
         df_raw = df_raw.drop(columns=[c for c in cols_to_drop if c in df_raw.columns])
 
-        # 6. AJOUT DES COLONNES MANQUANTES AVEC VALEURS PAR DÉFAUT
-        if "Ajustement_CS_DRV" not in df_raw.columns:
-            df_raw["Ajustement_CS_DRV"] = 0
-        if "Temps_Dispo_Mois_Min" not in df_raw.columns:
-            df_raw["Temps_Dispo_Mois_Min"] = 600000
-        if "Vol_ZB_Inclut_Mois_Hls" not in df_raw.columns:
-            df_raw["Vol_ZB_Inclut_Mois_Hls"] = 0
-        if "PDV_Estimes_ZB" not in df_raw.columns:
-            df_raw["PDV_Estimes_ZB"] = 0
+        if "Ajustement_CS_DRV" not in df_raw.columns: df_raw["Ajustement_CS_DRV"] = 0
+        if "Temps_Dispo_Mois_Min" not in df_raw.columns: df_raw["Temps_Dispo_Mois_Min"] = 600000
+        if "Vol_ZB_Inclut_Mois_Hls" not in df_raw.columns: df_raw["Vol_ZB_Inclut_Mois_Hls"] = 0
+        if "PDV_Estimes_ZB" not in df_raw.columns: df_raw["PDV_Estimes_ZB"] = 0
 
-        # 7. FORCER LES COLONNES NUMÉRIQUES
-        numeric_cols = ["MV", "CS_Actuels", "Ajustement_CS_DRV", "Vol_2026_Hls", "Vol_2027_Hls", 
-                        "Nbre_PDV_Tradi", "Temps_Dispo_Mois_Min", "Vol_ZB_Inclut_Mois_Hls", "PDV_Estimes_ZB"]
+        numeric_cols = ["MV", "CS_Actuels", "Ajustement_CS_DRV", "Vol_2026_Hls", "Vol_2027_Hls", "Nbre_PDV_Tradi", "Temps_Dispo_Mois_Min", "Vol_ZB_Inclut_Mois_Hls", "PDV_Estimes_ZB"]
         for col in numeric_cols:
             if col in df_raw.columns:
-                if isinstance(df_raw[col], pd.DataFrame):
-                    df_raw[col] = df_raw[col].iloc[:, 0]
+                if isinstance(df_raw[col], pd.DataFrame): df_raw[col] = df_raw[col].iloc[:, 0]
                 df_raw[col] = pd.to_numeric(df_raw[col], errors='coerce').fillna(0)
 
-        # 8. RÉCUPÉRATION AUTOMATIQUE DES COORDONNÉES GPS (Lat/Lon)
         base_df = load_base_data()
         if "Lat" not in df_raw.columns or "Lon" not in df_raw.columns:
             df_raw = df_raw.drop(columns=[c for c in ["Lat", "Lon"] if c in df_raw.columns])
@@ -311,13 +289,7 @@ if _uploaded_data:
             df_raw["Lat"] = df_raw["Lat"].fillna(-18.79)
             df_raw["Lon"] = df_raw["Lon"].fillna(46.85)
 
-        # 9. VÉRIFICATION FINALE
-        required_cols = [
-            "Région", "Agence", "MV", "CS_Actuels", "Ajustement_CS_DRV",
-            "Vol_2026_Hls", "Vol_2027_Hls", "Nbre_PDV_Tradi",
-            "Temps_Dispo_Mois_Min", "Vol_ZB_Inclut_Mois_Hls",
-            "PDV_Estimes_ZB", "Lat", "Lon"
-        ]
+        required_cols = ["Région", "Agence", "MV", "CS_Actuels", "Ajustement_CS_DRV", "Vol_2026_Hls", "Vol_2027_Hls", "Nbre_PDV_Tradi", "Temps_Dispo_Mois_Min", "Vol_ZB_Inclut_Mois_Hls", "PDV_Estimes_ZB", "Lat", "Lon"]
         missing = [c for c in required_cols if c not in df_raw.columns]
         if missing:
             st.error(f"❌ Colonnes manquantes dans le fichier Excel : {missing}. Le modèle par défaut est utilisé.")
@@ -338,13 +310,12 @@ else:
     st.warning("⚠️ **En attente de données :** Uploadez un fichier Excel ou sélectionnez 'OUI' pour utiliser les valeurs par défaut.")
 
 # ==========================================
-# 2. PARSING DMS (GPS) - FALLBACK ROBUSTE
+# 2. PARSING DMS (GPS)
 # ==========================================
 def _dms_to_dec_single(txt):
     if not isinstance(txt, str):
         return None, None
         
-    # 1. Essai de lecture DMS classique
     s = (txt.replace("?", "°").replace("’", "'").replace("′", "'").replace("″", '"').replace("”", '"'))
     pattern = r"(\d+)\s*°\s*(\d+)\s*'\s*([\d.]+)\s*\"?\s*([NSEW])"
     matches = re.findall(pattern, s)
@@ -353,28 +324,19 @@ def _dms_to_dec_single(txt):
     if len(matches) >= 2:
         for d, m, sec, dir_ in matches:
             val = float(d) + float(m) / 60 + float(sec) / 3600
-            if dir_ in ("S", "W"):
-                val = -val
-            if dir_ in ("N", "S"):
-                lat = val
-            else:
-                lon = val
+            if dir_ in ("S", "W"): val = -val
+            if dir_ in ("N", "S"): lat = val
+            else: lon = val
         return lat, lon
 
-    # 2. FALLBACK : Si c'est du décimal (ex: -18,64048611 ou -18.64048611)
-    # On cherche les nombres (avec point ou virgule)
     nums = re.findall(r"-?\d+[.,]?\d+", txt)
     if len(nums) >= 2:
         try:
-            # On teste les combinaisons
             for i in range(len(nums)-1):
                 v1 = float(nums[i].replace(',', '.'))
                 v2 = float(nums[i+1].replace(',', '.'))
-                # Si v1 ressemble à une latitude de Mada (-11 à -26) et v2 à une longitude (42 à 51)
-                if -26 <= v1 <= -11 and 42 <= v2 <= 51:
-                    return v1, v2
-                if -26 <= v2 <= -11 and 42 <= v1 <= 51:
-                    return v2, v1
+                if -26 <= v1 <= -11 and 42 <= v2 <= 51: return v1, v2
+                if -26 <= v2 <= -11 and 42 <= v1 <= 51: return v2, v1
         except:
             pass
             
@@ -392,25 +354,22 @@ def _find_gps_column(columns):
     return None
 
 # ==========================================
-# 3. CHARGEMENT GPS (OPTIMISÉ ET BLINDÉ)
+# 3. CHARGEMENT GPS (OPTIMISÉ)
 # ==========================================
 @st.cache_data
 def load_gps_data(_uploaded_file=None):
     if _uploaded_file is None:
         return pd.DataFrame()
 
-    # Lecture en mémoire pour éviter l'erreur "No columns to parse"
     file_bytes = _uploaded_file.getvalue()
     file_name = _uploaded_file.name
     df_gps = None
 
     if file_name.endswith('.csv'):
-        # On teste plusieurs séparateurs et encodages
         for encoding in ['utf-8', 'latin1', 'utf-8-sig']:
             for sep in [';', ',', '\t']:
                 try:
                     df_temp = pd.read_csv(io.BytesIO(file_bytes), sep=sep, on_bad_lines='skip', encoding=encoding)
-                    # Si on a réussi à lire au moins 1 colonne et des données, on valide
                     if len(df_temp.columns) > 0 and len(df_temp) > 0:
                         df_gps = df_temp
                         break
@@ -436,11 +395,9 @@ def load_gps_data(_uploaded_file=None):
 
     gps_col = _find_gps_column(df_gps.columns)
     
-    # Si on ne trouve pas de colonne GPS nommée, on scanne tout le tableau
     if gps_col is None:
         for col in df_gps.columns:
             sample_val = str(df_gps[col].dropna().iloc[0]) if not df_gps[col].dropna().empty else ""
-            # Si la valeur ressemble à un GPS
             if (re.search(r"[\d]+\s*[?°']", sample_val) and re.search(r"[NSEW]", sample_val)) or re.search(r"-?\d+[.,]\d+", sample_val):
                 gps_col = col
                 break
@@ -493,7 +450,7 @@ if not df_clients_gps.empty:
     )
 
 # ==========================================
-# 4. SIDEBAR — LOGO ET PARAMÈTRES
+# 4. SIDEBAR — PARAMÈTRES ET SEUILS
 # ==========================================
 st.sidebar.markdown(
     f"""
@@ -511,10 +468,17 @@ jours_travailles_mois = st.sidebar.number_input("Jours travaillés / mois", 15, 
 temps_moyen_visite_min = st.sidebar.number_input("Temps moyen par visite (min)", 10, 90, 30)
 cible_vol_cs = st.sidebar.number_input("Volume Cible par CS (Hls/an)", 1000, 50000, 25000, 1000)
 
-st.sidebar.subheader("Seuils de Charge")
+st.sidebar.subheader("Seuils de Charge CS (PDV)")
 seuil_surcharge_cs = st.sidebar.number_input("Seuil Surcharge CS (> X PDV)", 200, 500, 250)
 seuil_risque_cs = st.sidebar.number_input("Seuil Risque CS (> X PDV)", 180, 400, 210)
 seuil_sous_charge_cs = st.sidebar.number_input("Seuil Sous-charge CS (< X PDV)", 50, 200, 150)
+
+st.sidebar.subheader("Seuils de Charge CS (Volume)")
+seuil_surcharge_vol_cs = st.sidebar.number_input("Seuil Surcharge Vol (> X Hls)", 20000, 100000, 30000, 1000)
+seuil_risque_vol_cs = st.sidebar.number_input("Seuil Risque Vol (> X Hls)", 15000, 80000, 27000, 1000)
+seuil_sous_charge_vol_cs = st.sidebar.number_input("Seuil Sous-charge Vol (< X Hls)", 5000, 50000, 20000, 1000)
+
+st.sidebar.subheader("Seuil de Charge MV")
 seuil_surcharge_mv = st.sidebar.number_input("Seuil Surcharge MV (> X Hls vol)", 20000, 500000, 200000)
 
 st.sidebar.subheader("🎯 Simulation Zones Blanches par Agence")
@@ -593,17 +557,25 @@ st.markdown(f"""
 
 st.markdown("---")
 
-def get_statut_cs(pdv_cs):
-    if pdv_cs >= seuil_surcharge_cs: return "🔴 Surcharge CS"
-    elif pdv_cs >= seuil_risque_cs: return "🟡 Risque Surcharge CS"
-    elif pdv_cs <= seuil_sous_charge_cs: return "🔵 Sous-charge CS"
-    else: return "🟢 Équilibré CS"
+# FONCTIONS DE STATUT SÉPARÉES
+def get_statut_pdv_cs(pdv_cs):
+    if pdv_cs >= seuil_surcharge_cs: return "🔴 Surcharge PDV"
+    elif pdv_cs >= seuil_risque_cs: return "🟡 Risque Surcharge PDV"
+    elif pdv_cs <= seuil_sous_charge_cs: return "🔵 Sous-charge PDV"
+    else: return "🟢 Équilibré PDV"
+
+def get_statut_vol_cs(vol_cs):
+    if vol_cs >= seuil_surcharge_vol_cs: return "🔴 Surcharge Vol"
+    elif vol_cs >= seuil_risque_vol_cs: return "🟡 Risque Surcharge Vol"
+    elif vol_cs <= seuil_sous_charge_vol_cs: return "🔵 Sous-charge Vol"
+    else: return "🟢 Équilibré Vol"
 
 def get_statut_mv(vol_mv):
     if vol_mv >= seuil_surcharge_mv: return "🔴 Surcharge MV"
     return "🟢 Équilibré MV"
 
-df["Statut_CS"] = df["PDV_Par_CS"].apply(get_statut_cs)
+df["Statut_PDV_CS"] = df["PDV_Par_CS"].apply(get_statut_pdv_cs)
+df["Statut_Vol_CS"] = df["Vol_2027_Par_CS"].apply(get_statut_vol_cs)
 df["Statut_MV"] = df["Vol_2027_Par_MV"].apply(get_statut_mv)
 
 def color_status_cells(val):
@@ -623,20 +595,24 @@ df_recap = pd.DataFrame({
     "Agence": df["Agence"], "Région": df["Région"], "MV": df["MV"], "CS": df["Total_CS_Propose"],
     "Vol 2026 (Hls)": df["Vol_2026_Hls"], "Vol 2027 (Hls)": df["Vol_2027_Hls"],
     "Evol (+/- Hls)": df["Evol_Vol_Abs"], "Evol (%)": df["Evol_Vol_Pct"],
-    "Vol / CS": df["Vol_2027_Par_CS"].round(0), "Vol / MV": df["Vol_2027_Par_MV"].round(0),
-    "PDV / CS": df["PDV_Par_CS"].round(1), "Statut CS": df["Statut_CS"], "Statut MV": df["Statut_MV"],
+    "Vol / CS": df["Vol_2027_Par_CS"].round(0), 
+    "Statut Vol/CS": df["Statut_Vol_CS"],
+    "PDV / CS": df["PDV_Par_CS"].round(1), 
+    "Statut PDV/CS": df["Statut_PDV_CS"],
+    "Vol / MV": df["Vol_2027_Par_MV"].round(0), 
+    "Statut MV": df["Statut_MV"],
 })
 
 def highlight_dynamic_cols(col):
-    if col.name in ["Vol 2027 (Hls)", "Evol (+/- Hls)", "Evol (%)", "Vol / CS", "Vol / MV", "PDV / CS"]:
+    if col.name in ["Vol 2027 (Hls)", "Evol (+/- Hls)", "Evol (%)", "Vol / CS", "Statut Vol/CS", "PDV / CS", "Statut PDV/CS", "Vol / MV"]:
         return ["background-color: #fffacd; font-weight: bold;"] * len(col)
     return [""] * len(col)
 
 st.dataframe(
-    df_recap.style.apply(highlight_dynamic_cols, axis=0).map(color_status_cells, subset=["Statut CS", "Statut MV"])
+    df_recap.style.apply(highlight_dynamic_cols, axis=0).map(color_status_cells, subset=["Statut Vol/CS", "Statut PDV/CS", "Statut MV"])
     .format({
         "Vol 2026 (Hls)": "{:,.0f}", "Vol 2027 (Hls)": "{:,.0f}", "Evol (+/- Hls)": "{:+,.0f}",
-        "Evol (%)": "{:+.2f}%", "Vol / CS": "{:,.0f}", "Vol / MV": "{:,.0f}", "PDV / CS": "{:.1f}",
+        "Evol (%)": "{:+.2f}%", "Vol / CS": "{:,.0f}", "PDV / CS": "{:.1f}", "Vol / MV": "{:,.0f}",
     }), use_container_width=True,
 )
 
@@ -663,23 +639,48 @@ if not df.empty:
     row_sim_orig = df.loc[df["Agence"] == selected_sim_agence].iloc[0]
     mv_avant, cs_avant = row_sim_orig["MV"], row_sim_orig["Total_CS_Propose"]
     vol_2027_sim, pdv_tot_sim = row_sim_orig["Vol_2027_Hls"], row_sim_orig["PDV_Total_Ajuste"]
-    vol_cs_avant, vol_mv_avant, pdv_cs_avant = row_sim_orig["Vol_2027_Par_CS"], row_sim_orig["Vol_2027_Par_MV"], row_sim_orig["PDV_Par_CS"]
-    statut_cs_avant, statut_mv_avant = row_sim_orig["Statut_CS"], row_sim_orig["Statut_MV"]
+    
+    vol_cs_avant, pdv_cs_avant, vol_mv_avant = row_sim_orig["Vol_2027_Par_CS"], row_sim_orig["PDV_Par_CS"], row_sim_orig["Vol_2027_Par_MV"]
+    statut_vol_avant = get_statut_vol_cs(vol_cs_avant)
+    statut_pdv_avant = get_statut_pdv_cs(pdv_cs_avant)
+    statut_mv_avant = get_statut_mv(vol_mv_avant)
 
     cs_apres = max(1, cs_avant + delta_cs)
     mv_apres = max(1, mv_avant + delta_mv)
+    
     vol_cs_apres = vol_2027_sim / cs_apres
-    vol_mv_apres = vol_2027_sim / mv_apres
     pdv_cs_apres = pdv_tot_sim / cs_apres
-    statut_cs_apres, statut_mv_apres = get_statut_cs(pdv_cs_apres), get_statut_mv(vol_mv_apres)
+    vol_mv_apres = vol_2027_sim / mv_apres
+    
+    statut_vol_apres = get_statut_vol_cs(vol_cs_apres)
+    statut_pdv_apres = get_statut_pdv_cs(pdv_cs_apres)
+    statut_mv_apres = get_statut_mv(vol_mv_apres)
 
     df_sim_comp = pd.DataFrame({
-        "Dimension": ["Effectif MV", "Effectif CS", "Ratio CS / 1 MV", "Volume / CS (Hls/an)", "Volume / MV (Hls/an)", "Charge PDV / CS", "Statut Charge CS", "Statut Charge MV"],
-        "Situation AVANT": [f"{mv_avant}", f"{cs_avant}", f"{cs_avant / mv_avant:.1f}", f"{vol_cs_avant:,.0f}", f"{vol_mv_avant:,.0f}", f"{pdv_cs_avant:.1f}", statut_cs_avant, statut_mv_avant],
-        "Situation APRÈS (Simulation)": [f"{mv_apres} ({delta_mv:+d})", f"{cs_apres} ({delta_cs:+d})", f"{cs_apres / mv_apres:.1f}", f"{vol_cs_apres:,.0f}", f"{vol_mv_apres:,.0f}", f"{pdv_cs_apres:.1f}", statut_cs_apres, statut_mv_apres],
+        "Dimension": [
+            "Effectif MV", "Effectif CS", "Ratio CS / 1 MV", 
+            "Volume / CS (Hls/an)", "Statut Vol/CS",
+            "Charge PDV / CS", "Statut PDV/CS",
+            "Volume / MV (Hls/an)", "Statut MV"
+        ],
+        "Situation AVANT": [
+            f"{mv_avant}", f"{cs_avant}", f"{cs_avant / mv_avant:.1f}", 
+            f"{vol_cs_avant:,.0f}", statut_vol_avant,
+            f"{pdv_cs_avant:.1f}", statut_pdv_avant,
+            f"{vol_mv_avant:,.0f}", statut_mv_avant
+        ],
+        "Situation APRÈS (Simulation)": [
+            f"{mv_apres} ({delta_mv:+d})", f"{cs_apres} ({delta_cs:+d})", f"{cs_apres / mv_apres:.1f}", 
+            f"{vol_cs_apres:,.0f}", statut_vol_apres,
+            f"{pdv_cs_apres:.1f}", statut_pdv_apres,
+            f"{vol_mv_apres:,.0f}", statut_mv_apres
+        ],
     })
 
-    st.dataframe(df_sim_comp.style.map(color_status_cells, subset=["Situation AVANT", "Situation APRÈS (Simulation)"]), use_container_width=True)
+    st.dataframe(
+        df_sim_comp.style.map(color_status_cells, subset=["Situation AVANT", "Situation APRÈS (Simulation)"]), 
+        use_container_width=True
+    )
 
     col_btn1, col_btn2 = st.columns([1, 4])
     with col_btn1:
@@ -768,11 +769,14 @@ else:
         a = df.loc[df["Agence"] == ag].iloc[0]
         b = df_apres.loc[df_apres["Agence"] == ag].iloc[0]
         lignes.append({
-            "Agence": ag, "Δ CS": f"{m['delta_cs']:+d}", "Δ MV": f"{m['delta_mv']:+d}", "Vol/CS Avant": f"{a['Vol_2027_Par_CS']:,.0f}", "Vol/CS Après": f"{b['Vol_2027_Par_CS']:,.0f}",
-            "PDV/CS Avant": f"{a['PDV_Par_CS']:.1f}", "PDV/CS Après": f"{b['PDV_Par_CS']:.1f}", "Statut CS Avant": a["Statut_CS"], "Statut CS Après": get_statut_cs(b["PDV_Par_CS"]),
+            "Agence": ag, "Δ CS": f"{m['delta_cs']:+d}", "Δ MV": f"{m['delta_mv']:+d}", 
+            "Vol/CS Avant": f"{a['Vol_2027_Par_CS']:,.0f}", "Vol/CS Après": f"{b['Vol_2027_Par_CS']:,.0f}",
+            "PDV/CS Avant": f"{a['PDV_Par_CS']:.1f}", "PDV/CS Après": f"{b['PDV_Par_CS']:.1f}",
+            "Statut Vol Avant": a["Statut_Vol_CS"], "Statut Vol Après": get_statut_vol_cs(b["Vol_2027_Par_CS"]),
+            "Statut PDV Avant": a["Statut_PDV_CS"], "Statut PDV Après": get_statut_pdv_cs(b["PDV_Par_CS"]),
         })
     st.markdown("**Agences modifiées par les simulations enregistrées :**")
-    st.dataframe(pd.DataFrame(lignes).style.map(color_status_cells, subset=["Statut CS Avant", "Statut CS Après"]), use_container_width=True, hide_index=True)
+    st.dataframe(pd.DataFrame(lignes).style.map(color_status_cells, subset=["Statut Vol Avant", "Statut Vol Après", "Statut PDV Avant", "Statut PDV Après"]), use_container_width=True, hide_index=True)
 
 # ==========================================
 # 9. SIMULATION FINANCIÈRE
@@ -882,7 +886,8 @@ if not df_map_agences.empty:
         df_map_agences = df_map_agences[df_map_agences["Agence"] == selected_agence_map]
     if not df_map_agences.empty:
         cols_to_hover = {"Vol_2027_Hls": ":,.0f", "Lat": False, "Lon": False}
-        if "Statut_CS" in df_map_agences.columns: cols_to_hover["Statut_CS"] = True
+        if "Statut_Vol_CS" in df_map_agences.columns: cols_to_hover["Statut_Vol_CS"] = True
+        if "Statut_PDV_CS" in df_map_agences.columns: cols_to_hover["Statut_PDV_CS"] = True
         if "Statut_MV" in df_map_agences.columns: cols_to_hover["Statut_MV"] = True
 
         fig_agences = scatter_map_auto(df_map_agences, lat="Lat", lon="Lon", hover_name="Agence", hover_data=cols_to_hover, mapbox_style="open-street-map")
@@ -906,21 +911,34 @@ for _, row in df.iterrows():
     agences_meme_region = df[(df["Région"] == region_actuelle) & (df["Agence"] != row["Agence"])]
 
     conseil_transfert = "Equilibre regional stable."
-    if "Surcharge" in row["Statut_CS"]:
-        sous_charges = agences_meme_region[agences_meme_region["Statut_CS"].str.contains("Sous-charge")]
-        conseil_transfert = f"Surcharge CS : Envisager un transfert depuis [{', '.join(sous_charges['Agence'].tolist())}] (meme region) ou recrutement local." if not sous_charges.empty else "Surcharge CS : Pas de sous-charge regionale. Recrutement local imperatif."
-    elif "Sous-charge" in row["Statut_CS"]:
-        surcharges = agences_meme_region[agences_meme_region["Statut_CS"].str.contains("Surcharge")]
+    
+    is_surcharge = "Surcharge" in row["Statut_Vol_CS"] or "Surcharge" in row["Statut_PDV_CS"]
+    is_sous_charge = "Sous-charge" in row["Statut_Vol_CS"] or "Sous-charge" in row["Statut_PDV_CS"]
+    
+    if is_surcharge:
+        sous_charges = agences_meme_region[
+            agences_meme_region["Statut_Vol_CS"].str.contains("Sous-charge") | 
+            agences_meme_region["Statut_PDV_CS"].str.contains("Sous-charge")
+        ]
+        if not sous_charges.empty:
+            conseil_transfert = f"Surcharge (Vol ou PDV) : Envisager un transfert depuis [{', '.join(sous_charges['Agence'].tolist())}] (meme region) ou recrutement local."
+        else:
+            conseil_transfert = "Surcharge (Vol ou PDV) : Pas de sous-charge regionale. Recrutement local imperatif."
+    elif is_sous_charge:
+        surcharges = agences_meme_region[
+            agences_meme_region["Statut_Vol_CS"].str.contains("Surcharge") | 
+            agences_meme_region["Statut_PDV_CS"].str.contains("Surcharge")
+        ]
         if not surcharges.empty:
-            conseil_transfert = f"Sous-charge CS : Detachement possible vers [{', '.join(surcharges['Agence'].tolist())}] (meme region)."
+            conseil_transfert = f"Sous-charge (Vol ou PDV) : Detachement possible vers [{', '.join(surcharges['Agence'].tolist())}] (meme region)."
 
     recos_list.append({
         "Agence": row["Agence"].replace("-", " "), "Region": row["Région"], "MV Actuels": row["MV"], "CS Actuels": row["Total_CS_Propose"],
-        "Vol 2027 Hls": row["Vol_2027_Hls"], "Vol / CS": round(row["Vol_2027_Par_CS"], 0), "Vol / MV": round(row["Vol_2027_Par_MV"], 0),
-        "PDV / CS": round(row["PDV_Par_CS"], 1), "Statut CS": row["Statut_CS"], "Statut MV": row["Statut_MV"], "Reco Regionale": conseil_transfert,
+        "Vol 2027 Hls": row["Vol_2027_Hls"], "Vol / CS": round(row["Vol_2027_Par_CS"], 0), "PDV / CS": round(row["PDV_Par_CS"], 1),
+        "Statut Vol/CS": row["Statut_Vol_CS"], "Statut PDV/CS": row["Statut_PDV_CS"], "Statut MV": row["Statut_MV"], "Reco Regionale": conseil_transfert,
     })
 
-df_recos = pd.DataFrame(recos_list, columns=["Agence", "Region", "MV Actuels", "CS Actuels", "Vol 2027 Hls", "Vol / CS", "Vol / MV", "PDV / CS", "Statut CS", "Statut MV", "Reco Regionale"])
+df_recos = pd.DataFrame(recos_list, columns=["Agence", "Region", "MV Actuels", "CS Actuels", "Vol 2027 Hls", "Vol / CS", "PDV / CS", "Statut Vol/CS", "Statut PDV/CS", "Statut MV", "Reco Regionale"])
 csv_buffer = io.StringIO()
 df_recos.to_csv(csv_buffer, index=False, encoding="utf-8-sig")
 st.download_button(label="📥 Télécharger le rapport des recommandations (CSV)", data=csv_buffer.getvalue(), file_name="recommandations_commerciales_madagascar.csv", mime="text/csv")
@@ -929,7 +947,7 @@ if df.empty:
     st.info("Aucune donnée disponible pour les recommandations.")
 
 for _, row in df.iterrows():
-    with st.expander(f"🏢 Agence : {row['Agence']} ({row['Région']}) — [{row['Statut_CS']}] | [{row['Statut_MV']}]"):
+    with st.expander(f"🏢 Agence : {row['Agence']} ({row['Région']}) — [Vol: {row['Statut_Vol_CS']}] | [PDV: {row['Statut_PDV_CS']}]"):
         c1, c2, c3, c4 = st.columns(4)
         c1.metric("Effectifs", f"{row['MV']} MV | {row['Total_CS_Propose']} CS")
         c2.metric("Ratio Agence", f"{row['Ratio_CS_MV']:.1f} CS / 1 MV")
@@ -941,16 +959,23 @@ for _, row in df.iterrows():
 
         region_act = row["Région"]
         agences_reg = df[(df["Région"] == region_act) & (df["Agence"] != row["Agence"])]
-        if "Surcharge" in row["Statut_CS"]:
-            sc_list = agences_reg[agences_reg["Statut_CS"].str.contains("Sous-charge")]["Agence"].tolist()
+        
+        if "Surcharge" in row["Statut_Vol_CS"] or "Surcharge" in row["Statut_PDV_CS"]:
+            sc_list = agences_reg[
+                agences_reg["Statut_Vol_CS"].str.contains("Sous-charge") | 
+                agences_reg["Statut_PDV_CS"].str.contains("Sous-charge")
+            ]["Agence"].tolist()
             if sc_list:
-                st.warning(f"⚠️ **Suggestion Régionale :** Surcharge CS détectée. Possibilité d'effectuer un transfert depuis l'agence sous-chargée de la même région : **{', '.join(sc_list)}**, ou recrutement local.")
+                st.warning(f"⚠️ **Suggestion Régionale :** Surcharge détectée. Possibilité d'effectuer un transfert depuis l'agence sous-chargée de la même région : **{', '.join(sc_list)}**, ou recrutement local.")
             else:
-                st.warning("⚠️ **Suggestion :** Surcharge CS sans sous-charge régionale. **Recrutement local recommandé**.")
-        elif "Sous-charge" in row["Statut_CS"]:
-            sur_list = agences_reg[agences_reg["Statut_CS"].str.contains("Surcharge")]["Agence"].tolist()
+                st.warning("⚠️ **Suggestion :** Surcharge sans sous-charge régionale. **Recrutement local recommandé**.")
+        elif "Sous-charge" in row["Statut_Vol_CS"] or "Sous-charge" in row["Statut_PDV_CS"]:
+            sur_list = agences_reg[
+                agences_reg["Statut_Vol_CS"].str.contains("Surcharge") | 
+                agences_reg["Statut_PDV_CS"].str.contains("Surcharge")
+            ]["Agence"].tolist()
             if sur_list:
-                st.info(f"ℹ️ **Suggestion Régionale :** Sous-charge CS identifiée. Possibilité de détacher du personnel vers l'agence en surcharge de la même région : **{', '.join(sur_list)}**.")
+                st.info(f"ℹ️ **Suggestion Régionale :** Sous-charge identifiée. Possibilité de détacher du personnel vers l'agence en surcharge de la même région : **{', '.join(sur_list)}**.")
         else:
             st.success("✅ **Équilibre opérationnel validé.**")
 
@@ -966,11 +991,20 @@ for _, row in df.iterrows():
     agences_meme_region = df[(df["Région"] == region_actuelle) & (df["Agence"] != row["Agence"])]
 
     action = "Maintien de l'effectif"
-    if "Surcharge CS" in row["Statut_CS"]:
-        sous_charges = agences_meme_region[agences_meme_region["Statut_CS"].str.contains("Sous-charge")]
+    is_surcharge = "Surcharge" in row["Statut_Vol_CS"] or "Surcharge" in row["Statut_PDV_CS"]
+    is_sous_charge = "Sous-charge" in row["Statut_Vol_CS"] or "Sous-charge" in row["Statut_PDV_CS"]
+
+    if is_surcharge:
+        sous_charges = agences_meme_region[
+            agences_meme_region["Statut_Vol_CS"].str.contains("Sous-charge") | 
+            agences_meme_region["Statut_PDV_CS"].str.contains("Sous-charge")
+        ]
         action = f"Transfert depuis [{', '.join(sous_charges['Agence'].tolist())}] (même région) ou Recrutement Local" if not sous_charges.empty else "Recrutement Local CS (Pas de source de transfert régional)"
-    elif "Sous-charge CS" in row["Statut_CS"]:
-        surcharges = agences_meme_region[agences_meme_region["Statut_CS"].str.contains("Surcharge")]
+    elif is_sous_charge:
+        surcharges = agences_meme_region[
+            agences_meme_region["Statut_Vol_CS"].str.contains("Surcharge") | 
+            agences_meme_region["Statut_PDV_CS"].str.contains("Surcharge")
+        ]
         action = f"Détachement / Transfert vers [{', '.join(surcharges['Agence'].tolist())}] (même région)" if not surcharges.empty else "Sous-charge locale (Maintien ou redéploiement zones blanches)"
     elif "Surcharge MV" in row["Statut_MV"]:
         action = "Renfort d'Encadrement MV"
@@ -980,17 +1014,26 @@ for _, row in df.iterrows():
         sim_mv = f"{saved_mods['delta_mv']:+d}" if saved_mods['delta_mv'] != 0 else "0"
         sim_cs = f"{saved_mods['delta_cs']:+d}" if saved_mods['delta_cs'] != 0 else "0"
         new_cs, new_mv = max(1, row['Total_CS_Propose'] + saved_mods['delta_cs']), max(1, row['MV'] + saved_mods['delta_mv'])
-        statut_cs_apres, statut_mv_apres = get_statut_cs(row['PDV_Total_Ajuste'] / new_cs), get_statut_mv(row['Vol_2027_Hls'] / new_mv)
+        
+        new_vol_cs = row['Vol_2027_Hls'] / new_cs
+        new_pdv_cs = row['PDV_Total_Ajuste'] / new_cs
+        
+        statut_vol_apres = get_statut_vol_cs(new_vol_cs)
+        statut_pdv_apres = get_statut_pdv_cs(new_pdv_cs)
+        statut_mv_apres = get_statut_mv(row['Vol_2027_Hls'] / new_mv)
     else:
-        sim_mv, sim_cs, statut_cs_apres, statut_mv_apres = ".", ".", row["Statut_CS"], row["Statut_MV"]
+        sim_mv, sim_cs = ".", "."
+        statut_vol_apres, statut_pdv_apres, statut_mv_apres = row["Statut_Vol_CS"], row["Statut_PDV_CS"], row["Statut_MV"]
 
     recap_lignes.append({
         "Région": row["Région"], "Agence": row["Agence"], "Volume 2027 (Hls)": f"{row['Vol_2027_Hls']:,.0f}", "PDV Totaux": f"{row['PDV_Total_Ajuste']:,.0f}",
-        "Charge CS (PDV/CS)": f"{row['PDV_Par_CS']:.1f}", "Statut CS": statut_cs_apres, "Statut MV": statut_mv_apres, "Action Proposée": action,
+        "Charge CS (Vol)": f"{row['Vol_2027_Par_CS']:.0f}", "Statut Vol/CS": statut_vol_apres,
+        "Charge CS (PDV)": f"{row['PDV_Par_CS']:.1f}", "Statut PDV/CS": statut_pdv_apres,
+        "Statut MV": statut_mv_apres, "Action Proposée": action,
         "Simulation (+/- MV)": sim_mv, "Simulation (+/- CS)": sim_cs,
     })
 
-df_recap_final = pd.DataFrame(recap_lignes, columns=["Région", "Agence", "Volume 2027 (Hls)", "PDV Totaux", "Charge CS (PDV/CS)", "Statut CS", "Statut MV", "Action Proposée", "Simulation (+/- MV)", "Simulation (+/- CS)"])
+df_recap_final = pd.DataFrame(recap_lignes, columns=["Région", "Agence", "Volume 2027 (Hls)", "PDV Totaux", "Charge CS (Vol)", "Statut Vol/CS", "Charge CS (PDV)", "Statut PDV/CS", "Statut MV", "Action Proposée", "Simulation (+/- MV)", "Simulation (+/- CS)"])
 st.table(df_recap_final)
 
 dl_col1, dl_col2, _ = st.columns([1, 1, 3])
