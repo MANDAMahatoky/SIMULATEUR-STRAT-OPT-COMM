@@ -811,7 +811,7 @@ else:
     st.info("Aucune donnée disponible pour la simulation financière.")
 
 # ==========================================
-# 10. CARTE INTERACTIVE
+# 10. CARTE INTERACTIVE (AVEC FILTRE RÉGION -> AGENCE)
 # ==========================================
 st.markdown("---")
 st.markdown('<div id="section-carte"></div>', unsafe_allow_html=True)
@@ -819,6 +819,30 @@ st.subheader("🗺️ Carte Interactive : Agences & Points de Vente Détaillés"
 
 df_map_agences = df.copy() if not df.empty else load_base_data()
 
+# --- NOUVEAU FILTRE RÉGION -> AGENCE ---
+col_filter1, col_filter2 = st.columns(2)
+
+with col_filter1:
+    regions_dispo = ["Toutes les régions"] + df_map_agences["Région"].unique().tolist()
+    selected_region_map = st.selectbox("Filtrer par Région :", regions_dispo, key="map_region_filter")
+
+# Filtrer les agences disponibles selon la région choisie
+if selected_region_map != "Toutes les régions":
+    agences_dispo = df_map_agences[df_map_agences["Région"] == selected_region_map]["Agence"].unique().tolist()
+else:
+    agences_dispo = df_map_agences["Agence"].unique().tolist()
+
+with col_filter2:
+    selected_agence_map = st.selectbox("Filtrer par Agence :", ["Toutes les agences"] + agences_dispo, key="map_agence_filter")
+
+# 1. Filtrage des données AGENCES pour la carte
+df_map_agences_filtered = df_map_agences.copy()
+if selected_region_map != "Toutes les régions":
+    df_map_agences_filtered = df_map_agences_filtered[df_map_agences_filtered["Région"] == selected_region_map]
+if selected_agence_map != "Toutes les agences":
+    df_map_agences_filtered = df_map_agences_filtered[df_map_agences_filtered["Agence"] == selected_agence_map]
+
+# 2. Filtrage des POINTS DE VENTE (GPS)
 ag_col = None
 if not df_clients_gps.empty:
     for c in df_clients_gps.columns:
@@ -826,16 +850,19 @@ if not df_clients_gps.empty:
             ag_col = c
             break
 
-if ag_col is not None and not df_map_agences.empty:
-    selected_agence_map = st.selectbox("Filtrer par Agence :", ["Toutes les agences"] + df_map_agences["Agence"].tolist())
-    df_map_filtered = df_clients_gps.copy()
+df_map_filtered = df_clients_gps.copy()
+if ag_col is not None and not df_map_filtered.empty:
     if selected_agence_map != "Toutes les agences":
+        # Si une agence spécifique est choisie
         ag_id = str(int(selected_agence_map.split("-")[0])).zfill(2)
         df_map_filtered = df_map_filtered[df_map_filtered[ag_col].astype(str).str.zfill(2) == ag_id]
-else:
-    selected_agence_map = "Toutes les agences"
-    df_map_filtered = df_clients_gps.copy()
+    elif selected_region_map != "Toutes les régions":
+        # Si une région spécifique est choisie (mais "Toutes les agences" sélectionné)
+        agences_dans_region = df_map_agences_filtered["Agence"].tolist()
+        ag_ids = [str(int(ag.split("-")[0])).zfill(2) for ag in agences_dans_region]
+        df_map_filtered = df_map_filtered[df_map_filtered[ag_col].astype(str).str.zfill(2).isin(ag_ids)]
 
+# --- SUITE DU CODE DE LA CARTE (Inchangé) ---
 hover_cols = {c: True for c in ["Nom CS2", "Nom client", "Description activité", "Activite", "CS"] if c in df_map_filtered.columns}
 hover_cols["Lat"], hover_cols["Lon"] = False, False
 
@@ -881,22 +908,19 @@ else:
     fig_map = scatter_map_auto(pd.DataFrame({"Lat": [-18.79], "Lon": [46.85]}), lat="Lat", lon="Lon", zoom=5.5, center={"lat": -18.79, "lon": 46.85}, mapbox_style="open-street-map", height=650, title="Cartographie des Points de Vente & Agences")
     fig_map.data = []
 
-if not df_map_agences.empty:
-    if selected_agence_map != "Toutes les agences":
-        df_map_agences = df_map_agences[df_map_agences["Agence"] == selected_agence_map]
-    if not df_map_agences.empty:
-        cols_to_hover = {"Vol_2027_Hls": ":,.0f", "Lat": False, "Lon": False}
-        if "Statut_Vol_CS" in df_map_agences.columns: cols_to_hover["Statut_Vol_CS"] = True
-        if "Statut_PDV_CS" in df_map_agences.columns: cols_to_hover["Statut_PDV_CS"] = True
-        if "Statut_MV" in df_map_agences.columns: cols_to_hover["Statut_MV"] = True
+if not df_map_agences_filtered.empty:
+    cols_to_hover = {"Vol_2027_Hls": ":,.0f", "Lat": False, "Lon": False}
+    if "Statut_Vol_CS" in df_map_agences_filtered.columns: cols_to_hover["Statut_Vol_CS"] = True
+    if "Statut_PDV_CS" in df_map_agences_filtered.columns: cols_to_hover["Statut_PDV_CS"] = True
+    if "Statut_MV" in df_map_agences_filtered.columns: cols_to_hover["Statut_MV"] = True
 
-        fig_agences = scatter_map_auto(df_map_agences, lat="Lat", lon="Lon", hover_name="Agence", hover_data=cols_to_hover, mapbox_style="open-street-map")
-        for trace in fig_agences.data:
-            trace.marker.symbol, trace.marker.color, trace.marker.size, trace.name = "square", "#FF0000", 14, "Agences (Entrepôt)"
-        for trace_ag in fig_agences.data:
-            fig_map.add_trace(trace_ag)
+    fig_agences = scatter_map_auto(df_map_agences_filtered, lat="Lat", lon="Lon", hover_name="Agence", hover_data=cols_to_hover, mapbox_style="open-street-map")
+    for trace in fig_agences.data:
+        trace.marker.symbol, trace.marker.color, trace.marker.size, trace.name = "square", "#FF0000", 14, "Agences (Entrepôt)"
+    for trace_ag in fig_agences.data:
+        fig_map.add_trace(trace_ag)
 
-st.caption(f"📍 {len(df_clients_gps):,} points de vente chargés.")
+st.caption(f"📍 {len(df_clients_gps):,} points de vente chargés sur la carte.")
 st.plotly_chart(fig_map, use_container_width=True)
 
 # ==========================================
