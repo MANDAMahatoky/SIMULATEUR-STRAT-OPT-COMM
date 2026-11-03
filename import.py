@@ -3,6 +3,7 @@ import os
 import re
 import base64
 import gc
+import json
 import numpy as np
 import pandas as pd
 import plotly.express as px
@@ -15,6 +16,32 @@ import streamlit.components.v1 as components
 st.set_page_config(
     page_title="Simulateur Commercial Madagascar", layout="wide"
 )
+
+# ==========================================
+# GESTION DE LA PERSISTANCE DE L'HISTORIQUE ZB
+# ==========================================
+HIST_FILE = "historique_zb.json"
+
+def load_history():
+    if os.path.exists(HIST_FILE):
+        try:
+            with open(HIST_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            return []
+    return []
+
+def save_history(hist):
+    try:
+        with open(HIST_FILE, "w", encoding="utf-8") as f:
+            json.dump(hist, f, ensure_ascii=False, indent=4)
+    except Exception:
+        pass
+
+if "historique_zb" not in st.session_state:
+    st.session_state.historique_zb = load_history()
+if "show_zb_history" not in st.session_state:
+    st.session_state.show_zb_history = False
 
 # ==========================================
 # LECTURE DU LOGO STAR (Fichier local)
@@ -200,14 +227,6 @@ def load_base_data():
     return pd.DataFrame(data)
 
 # ==========================================
-# INITIALISATION DE L'HISTORIQUE ZB
-# ==========================================
-if "historique_zb" not in st.session_state:
-    st.session_state.historique_zb = []
-if "show_zb_history" not in st.session_state:
-    st.session_state.show_zb_history = False
-
-# ==========================================
 # UPLOAD ET CHOIX OUI/NON AVEC CALLBACK ET TRADUCTION ROBUSTE
 # ==========================================
 if "radio_defaults" not in st.session_state:
@@ -217,7 +236,6 @@ def handle_upload_change():
     st.session_state.radio_defaults = "NON"
     # NOUVEAU : On vide les simulations sauvegardées si on change de fichier
     st.session_state.simulations_sauvegardees = {}
-    st.session_state.historique_zb = []
 
 col_upload1, col_upload2 = st.columns(2)
 
@@ -506,11 +524,15 @@ if not df_raw.empty:
     col_btn_zb1, col_btn_zb2 = st.sidebar.columns(2)
     with col_btn_zb1:
         if st.button("💾 Enregistrer", key="save_zb", use_container_width=True):
-            st.session_state.historique_zb.append({
+            # Ajout d'un timestamp pour tracer l'historique
+            nouvelle_sim = {
+                "Date": pd.Timestamp.now().strftime("%Y-%m-%d %H:%M"),
                 "Agence": selected_agence_zb,
                 "Volume ZB": sim_zb_vol_mois,
                 "PDV ZB": sim_zb_pdv
-            })
+            }
+            st.session_state.historique_zb.append(nouvelle_sim)
+            save_history(st.session_state.historique_zb) # Sauvegarde persistante (fichier JSON)
             st.success("Simulation ZB enregistrée !")
     with col_btn_zb2:
         if st.button("📜 Historique", key="show_zb_hist", use_container_width=True):
@@ -522,8 +544,21 @@ if not df_raw.empty:
             if st.session_state.historique_zb:
                 df_hist = pd.DataFrame(st.session_state.historique_zb)
                 st.dataframe(df_hist, hide_index=True, use_container_width=True)
+                
+                # Option d'export de l'historique (crucial pour Streamlit Cloud)
+                csv_hist = df_hist.to_csv(index=False, encoding="utf-8-sig")
+                st.download_button(
+                    label="📥 Exporter l'historique (CSV)",
+                    data=csv_hist,
+                    file_name="historique_zb.csv",
+                    mime="text/csv",
+                    use_container_width=True,
+                    key="dl_hist_zb"
+                )
+                
                 if st.button("🗑️ Vider l'historique", use_container_width=True):
                     st.session_state.historique_zb = []
+                    save_history([])
                     st.rerun()
             else:
                 st.info("Aucune simulation ZB enregistrée.")
